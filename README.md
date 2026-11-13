@@ -1,8 +1,8 @@
 # Huzhou Dialect Speech Recognition
 
 Speech-to-text for **Huzhou dialect (湖州话)**, a Wu Chinese dialect that standard speech
-recognition can't handle. I fine-tuned OpenAI's Whisper-medium on about 15 hours of Huzhou dialect
-audio, and cut the character error rate from **122.0% to 26.8%**.
+recognition can't handle. I fine-tuned OpenAI's Whisper-medium on about 13 hours of Huzhou dialect
+audio, and cut the character error rate from **98.8% to 26.7%**.
 
 This repo is an interactive demo with three tabs:
 
@@ -15,11 +15,15 @@ This repo is an interactive demo with three tabs:
 | **Model** | [BillWang7/whisper-medium-ch-hz](https://huggingface.co/BillWang7/whisper-medium-ch-hz) |
 | **Dataset** | [BillWang7/huzhou-dialect-speech](https://huggingface.co/datasets/BillWang7/huzhou-dialect-speech) |
 
-## Why
+## Inspiration
 
 My grandmother mainly speaks Huzhou dialect. When I looked for speech recognition that could understand
 her, nothing worked: Whisper and other public models focus on Mandarin and Cantonese, and output
 gibberish on regional dialects that millions of people still speak. So I built one.
+
+Huzhou dialect has about 3 million native speakers, but decades of Mandarin-only schooling mean
+many younger people in the region can understand it but no longer speak it. Like most Chinese dialects, it
+has no standard written form, so turning speech into simplified Chinese characters is one way to help preserve it.
 
 ## Results
 
@@ -27,12 +31,13 @@ Character error rate (CER) on held-out test clips the model never trained on:
 
 | Model | CER |
 |---|---|
-| Whisper-medium (baseline) | 122.0% |
-| **Fine-tuned (this project)** | **26.8%** |
+| Whisper-medium (baseline) | 98.8% |
+| **Fine-tuned (this project)** | **26.7%** |
 
-Measured on all 1,705 test clips, with both models set to transcribe Chinese. CER can go above 100% when
-the output is longer than what was said: baseline Whisper sometimes gets stuck repeating one character.
-Its median CER is 100%, meaning a typical clip gets essentially nothing right.
+Mean CER per-clip on all 1,705 test clips; both models use identical decoding settings
+([`src/decoding.py`](src/decoding.py)). The fine-tuned model is better on 1,678 clips and gets 278 exactly
+right; the baseline's median CER is 100%, meaning a typical clip gets essentially nothing right.
+Full method, confidence intervals and error analysis: **[technical report](docs/technical-report.md)**.
 
 | | Example |
 |---|---|
@@ -59,29 +64,46 @@ Then open **http://localhost:7860**.
 
 ## How it works
 
-1. **Data:** audio extracted from Huzhou dialect news broadcasts and film, with transcripts made by
-   reading the on-screen subtitles with OCR and aligning them to the audio, then cleaned by hand.
-   Result: 15,354 training clips and 1,705 test clips.
-2. **Training:** fine-tuned `openai/whisper-medium` for 4,000 steps (batch size 64, learning rate 1e-5).
+1. **Data:** 72 Huzhou news broadcasts with Mandarin subtitles. Mandarin segments were removed by hand,
+   subtitles were read with OCR, corrected and aligned to the audio: 15,354 training clips (12.9 h) and
+   1,705 test clips (1.5 h). Code: [`data_pipeline/`](data_pipeline).
+2. **Training:** full fine-tune of `openai/whisper-medium`, 4,000 steps, batch size 64, learning rate 1e-5,
+   following Hugging Face's [Fine-Tune Whisper](https://huggingface.co/blog/fine-tune-whisper) guide.  Training notebooks are in the [model repo](https://huggingface.co/BillWang7/whisper-medium-ch-hz/tree/main).
 3. **Demo:** a [Gradio](https://www.gradio.app/) web app, packaged with Docker so it runs the same on any machine.
 
-Training code and per-clip results are in the [model repo](https://huggingface.co/BillWang7/whisper-medium-ch-hz/tree/main).
+The **[technical report](docs/technical-report.md)** covers the data pipeline, training curves, evaluation
+
 
 ## Project layout
 
 ```
 app/demo.py              Gradio web app (featured clips, random test clip, your own audio)
 src/transcribe.py        Loads the model and transcribes audio
-scripts/run_baseline.py  Regenerates baseline.csv (uses an Apple or NVIDIA GPU if available)
-examples/                5 featured clips (with English translations) + precomputed baseline outputs
-examples/test_set/       Full held-out test set: 1,705 clips, transcripts (text.csv),
-                         baseline Whisper outputs for every clip (baseline.csv)
+src/decoding.py          Decoding settings shared by the demo and evaluation (incl. loop guard)
+src/scoring.py           Character error rate, shared by the demo and evaluation
+scripts/run_test_set.py  Runs either model over the whole test set (uses an Apple or NVIDIA GPU)
+scripts/score.py         Scores both models' outputs
+data_pipeline/           How the dataset was built: subtitle OCR, alignment, cleaning, train/test split
+tests/                   Unit tests for the pipeline rules and CER (python -m unittest discover tests)
+examples/                5 featured clips (with English translations)
+examples/test_set/       Held-out test set: 1,705 clips (audio/), transcripts (text.csv),
+                         per-clip outputs of both models (baseline.csv, finetuned.csv)
+docs/technical-report.md Full write-up
 Dockerfile               Reproducible environment (Python 3.10, CPU PyTorch)
 requirements.txt         Exact package versions
 ```
 
-## Limitations
+## Reproduce the results
 
-- Trained mostly on news audio, so it's less accurate on casual speech and noisy recordings.
-- Names and place names are the most common errors.
-- Writes Mandarin characters rather than a phonetic transcription of the dialect.
+On a machine with Python and the packages from `requirements.txt` (a GPU makes this much faster):
+
+```bash
+python -m scripts.run_test_set baseline
+python -m scripts.run_test_set finetuned
+python -m scripts.score
+```
+
+## Known Limitations
+
+- Trained only on news broadcast audio.
+- Training clips are less than 15 seconds long, so the mdoel struggles with longer audio samples. 

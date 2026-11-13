@@ -5,3 +5,7 @@ __pycache__/
 .env
 .ipynb_checkpoints/
 hf_drafts/
+CLAUDE.local.md
+
+# Dataset pipeline intermediate files
+pipeline_work/

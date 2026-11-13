@@ -1,0 +1,6 @@
+# Extra packages for building the dataset from videos (not needed for the demo or evaluation).
+# Versions the published dataset was built with. Also needs ffmpeg on the PATH.
+paddlepaddle==2.6.1   # use paddlepaddle-gpu on an NVIDIA machine
+paddleocr==2.8.0
+natsort==8.4.0
+pydub==0.25.1

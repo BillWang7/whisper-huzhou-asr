@@ -8,12 +8,12 @@ from transformers import (
     AutoModelForSpeechSeq2Seq,
 )
 
+from src.decoding import generate, pick_device
+
 MODEL_ID = "BillWang7/whisper-medium-ch-hz"
 SAMPLE_RATE = 16000
 
-DEVICE = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
-)
+DEVICE = pick_device()
 
 processor = WhisperProcessor.from_pretrained(
     MODEL_ID
@@ -55,12 +55,7 @@ def transcribe(audio_path: str) -> str:
     input_features = inputs.input_features.to(DEVICE)
     attention_mask = inputs.attention_mask.to(DEVICE)
 
-    predicted_ids = model.generate(
-        input_features,
-        attention_mask=attention_mask,
-        language="zh",
-        task="transcribe",
-    )
+    predicted_ids = generate(model, input_features, attention_mask)
 
 
     return processor.batch_decode(

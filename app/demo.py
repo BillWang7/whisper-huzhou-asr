@@ -6,6 +6,7 @@ from pathlib import Path
 
 import gradio as gr
 
+from src.scoring import align, normalize, score
 from src.transcribe import transcribe
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
@@ -22,46 +23,6 @@ N_TEST = len(TEST_TEXTS)
 
 MODEL_URL = "https://huggingface.co/BillWang7/whisper-medium-ch-hz"
 GITHUB_URL = "https://github.com/BillWang7/whisper-huzhou-asr"
-
-
-# ---------- Scoring ----------
-
-def _normalize(text: str) -> str:
-    """Keep only letters/digits/CJK characters, so punctuation doesn't count."""
-    return "".join(ch for ch in text if ch.isalnum())
-
-
-def align(reference: str, prediction: str) -> list[tuple[str | None, str | None]]:
-    """Character-level alignment (Levenshtein). Returns (ref_char, pred_char) pairs;
-    None marks a missing character (deletion) or an extra one (insertion)."""
-    ref, hyp = _normalize(reference), _normalize(prediction)
-    n, m = len(ref), len(hyp)
-    dp = [[0] * (m + 1) for _ in range(n + 1)]
-    for i in range(n + 1):
-        dp[i][0] = i
-    for j in range(m + 1):
-        dp[0][j] = j
-    for i in range(1, n + 1):
-        for j in range(1, m + 1):
-            dp[i][j] = min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (ref[i - 1] != hyp[j - 1]))
-    pairs, i, j = [], n, m
-    while i or j:
-        if i and j and dp[i][j] == dp[i - 1][j - 1] + (ref[i - 1] != hyp[j - 1]):
-            pairs.append((ref[i - 1], hyp[j - 1])); i -= 1; j -= 1
-        elif i and dp[i][j] == dp[i - 1][j] + 1:
-            pairs.append((ref[i - 1], None)); i -= 1
-        else:
-            pairs.append((None, hyp[j - 1])); j -= 1
-    return pairs[::-1]
-
-
-def score(reference: str, prediction: str) -> tuple[float, int, int]:
-    """(CER in percent, characters correct, reference length)."""
-    pairs = align(reference, prediction)
-    errors = sum(r != h for r, h in pairs)
-    correct = sum(r == h for r, h in pairs)
-    length = max(len(_normalize(reference)), 1)
-    return 100 * errors / length, correct, length
 
 
 # ---------- Result rendering ----------
@@ -85,7 +46,11 @@ def na_tile(title: str, msg: str) -> str:
 
 def diff_grid(title: str, reference: str, prediction: str, model_label: str, note: str = "") -> str:
     cols = [f'<div class="col lab"><span class="c">What was said</span><span class="c">{html.escape(model_label)}</span></div>']
-    for r, h in align(reference, prediction):
+    # A runaway output (the model stuck repeating a character) would draw hundreds of columns.
+    # Show only its start and say how much was cut; the score above still counts all of it.
+    shown, limit = normalize(prediction), 2 * len(normalize(reference)) + 10
+    hidden = max(len(shown) - limit, 0)
+    for r, h in align(reference, shown[:limit]):
         if r == h:
             top, bot = f'<span class="c">{html.escape(r)}</span>', f'<span class="c ok">{html.escape(h)}</span>'
         elif r is None:  # extra character the model added
@@ -95,6 +60,8 @@ def diff_grid(title: str, reference: str, prediction: str, model_label: str, not
         else:  # wrong character
             top, bot = f'<span class="c miss">{html.escape(r)}</span>', f'<span class="c bad">{html.escape(h)}</span>'
         cols.append(f'<div class="col">{top}{bot}</div>')
+    if hidden:
+        cols.append(f'<div class="col more">… {hidden} more extra characters not shown</div>')
     note_html = f'<div class="note">{html.escape(note)}</div>' if note else ""
     return (f'<div class="section"><div class="section-title">{html.escape(title)}</div>'
             f'<div class="diff">{"".join(cols)}</div>{note_html}</div>')
@@ -204,6 +171,7 @@ CSS = """
 .diff { display: flex; flex-wrap: wrap; row-gap: 10px; }
 .col { display: inline-flex; flex-direction: column; align-items: center; }
 .col.lab { align-items: flex-start; margin-right: 10px; }
+.col.more { justify-content: flex-end; font-size: 0.85em; opacity: 0.7; padding: 0 0 4px 8px; }
 .col.lab .c { font-size: 0.8em; font-weight: 600; opacity: 0.6; min-width: 0; line-height: 2.2; }
 .c { font-size: 1.4em; line-height: 1.55; min-width: 1.3em; text-align: center; padding: 0 2px; border-radius: 5px; margin: 1px; }
 .c.ok { color: #16a34a; }
@@ -229,9 +197,9 @@ HEADER = f"""
 standard speech recognition handles poorly. Output is written in Mandarin characters.
 <a href="{MODEL_URL}" target="_blank">Model on Hugging Face</a> · <a href="{GITHUB_URL}" target="_blank">Code on GitHub</a></p>
 <div class="stats">
-  <div class="stat good"><div class="num">26.8%</div><div class="lbl">Fine-tuned character error rate</div></div>
-  <div class="stat bad"><div class="num">122.0%</div><div class="lbl">Baseline Whisper-medium error rate</div></div>
-  <div class="stat"><div class="num">4.5×</div><div class="lbl">fewer errors (all 1,705 held-out clips)</div></div>
+  <div class="stat good"><div class="num">26.7%</div><div class="lbl">Fine-tuned character error rate</div></div>
+  <div class="stat bad"><div class="num">98.8%</div><div class="lbl">Baseline Whisper-medium error rate</div></div>
+  <div class="stat"><div class="num">3.7×</div><div class="lbl">fewer errors (all 1,705 held-out clips)</div></div>
 </div>
 </div>
 """
@@ -275,10 +243,10 @@ with gr.Blocks(title="Huzhou Dialect ASR", css=CSS, theme=gr.themes.Soft(primary
     gr.Markdown(
         "<small>\\* <b>Baseline outputs are precomputed, not run live.</b> They were generated once in advance by "
         "running the original <code>openai/whisper-medium</code> on every test clip, with the same settings "
-        "(language: Chinese, task: transcribe), and saved with the demo, so you don't need to download a second model. "
+        "(language: Chinese, task: transcribe, same loop guard), and saved with the demo, so you don't need to download a second model. "
         "The fine-tuned model's output is computed live every time you press Transcribe.<br>"
         "Runs on CPU, so a transcription can take several seconds. "
-        "Error rates are character error rate (CER): edit distance divided by reference length, "
+        "Error rates are character error rate (CER): edit distance divided by reference length, ignoring punctuation, "
         "which can exceed 100% when the output is longer than the reference. "
         "Featured and random clips are from the held-out test set, which the model never trained on.</small>"
     )
