@@ -9,8 +9,10 @@ Huzhou dialect (湖州话) is a Wu Chinese dialect with roughly 3 million native
 written form. General-purpose speech recognition does not handle it: OpenAI's Whisper-medium reaches a
 character error rate (CER) of 98.8% on our test set. We built a 14.4-hour supervised corpus from local news
 broadcasts, using OCR on burned-in subtitles to obtain transcripts, and fine-tuned Whisper-medium on
-12.9 hours of it. On 1,705 held-out clips the fine-tuned model reaches **26.7% CER** (95% CI 25.6–27.8%),
-is better than the baseline on 1,678 clips, and transcribes 278 clips exactly.
+12.9 hours of it. On 1,705 held-out news clips the fine-tuned model reaches **26.7% CER** (95% CI
+25.5–27.8%), is better than the baseline on 1,678 clips, and transcribes 278 clips exactly. On a second test
+set of 828 recordings of ordinary people reading everyday sentences, it reaches **55.6% CER** against the
+baseline's 93.5%: a large gain, but twice the in-domain error rate.
 
 ## 1. Motivation
 
@@ -133,16 +135,26 @@ repetition loop and repeats a character until it hits the length limit; without 
 8-character reference produced hundreds of repeated characters (CER 5,550%). With the guard, it changed
 15 baseline outputs; the worst baseline clip fell from 5,550% to 333% CER.
 
+**Test sets.** Two held-out sets, neither used in training. *News broadcasts* is the 1,705-clip test split
+(Section 2.3), from the same channel as the training data. *Real speakers* (828 clips, 86.6 minutes) tests
+the model outside that domain. It has two parts, both recorded with the speakers' permission: 728 clips
+recorded by volunteers through a phone recording app, reading one sentence each, mostly everyday dialogue
+from TV dramas and narration from travel programmes (8 kHz audio); and 100 clips from four longer recordings
+reading a folk tale, a health leaflet and an essay (48 kHz), cut into sentences by hand. One app clip whose
+sentence also appears in the training transcripts was removed; no other sentence overlaps the training data.
+
 **Baseline.** The unmodified `openai/whisper-medium` with the same decoding settings. Forcing the language
 matters: without it, Whisper's language detection produced Japanese, Arabic, French and other languages
 on 9 of the first 100 clips.
 
 ## 5. Results
 
+### 5.1 News broadcasts
+
 | Model | Mean CER (95% CI) | Median CER | Exact clips | Clips over 100% |
 |---|---:|---:|---:|---:|
 | Whisper-medium (baseline) | 98.8% (97.8–99.8) | 100.0% | 1 | 505 |
-| **Fine-tuned** | **26.7% (25.6–27.8)** | **21.7%** | **278** | 8 |
+| **Fine-tuned** | **26.7% (25.5–27.8)** | **21.7%** | **278** | 8 |
 
 Confidence intervals are from 2,000 bootstrap resamples of the test clips. The fine-tuned model has lower
 CER than the baseline on 1,678 clips, ties on 18 and is worse on 9. Pooled CER (total errors over total
@@ -174,14 +186,44 @@ Short clips are hardest, as each error weighs more and there is less context.
 
 Typical fine-tuned errors are personal and place names (席 → 薛 above) and near-synonyms (来 → 到).
 
+### 5.2 Real speakers
+
+| Model | Mean CER (95% CI) | Median CER | Exact clips | Clips over 100% |
+|---|---:|---:|---:|---:|
+| Whisper-medium (baseline) | 93.5% (92.2–94.9) | 100.0% | 0 | 114 |
+| **Fine-tuned** | **55.6% (53.7–57.5)** | **50.5%** | **13** | 28 |
+
+| Part | Clips | Fine-tuned | Baseline |
+|---|---:|---:|---:|
+| App recordings (everyday sentences, phone audio) | 728 | 55.8% | 94.6% |
+| Read-aloud recordings (folk tale, leaflet, essay) | 100 | 53.9% | 85.5% |
+
+The fine-tuned model is better than the baseline on 723 of 828 clips, ties on 54 and is worse on 51, and
+it is better across all lengths (≤ 9 characters: 58.9% vs 97.1%; ≥ 15 characters: 50.7% vs 87.1%). Its
+error rate is roughly double the news result, for three visible reasons:
+
+- **Domain shift.** The model learned news language and sometimes imposes it: it inserted 女士 ("Ms.", as
+  in news interviews' "Ms. X said") into 14 transcripts whose reference never contains it.
+- **Paraphrase.** Training transcripts are Mandarin subtitles, which often reword the dialect. The model
+  learned to do the same, so meaning-preserving rewrites count as errors: 他们未必等得了半年 → 他们不一定等得了半年
+  (both "they may not be able to wait half a year") scores 33%. Errors are mostly substitutions (4,076,
+  against 918 deletions and 539 insertions).
+- **Recording conditions.** Most clips are 8 kHz phone recordings by untrained speakers, while training
+  audio is studio-quality broadcast sound.
+
+CER therefore overstates how much meaning is lost, but the gap to the news result is real and is the main
+target for future work: training data from more speakers and settings.
+
 
 ## 6. Reproducibility
 
 ```bash
-# Transcribe the test set with each model (≈35 min each on an Apple M4 GPU)
+# Transcribe each test set with each model (≈35 min per model for news, ≈20 for real speakers, Apple M4 GPU)
 python -m scripts.run_test_set baseline
 python -m scripts.run_test_set finetuned
-# Score both
+python -m scripts.run_test_set baseline --set real
+python -m scripts.run_test_set finetuned --set real
+# Score everything (prints every result number in this report)
 python -m scripts.score
 ```
 

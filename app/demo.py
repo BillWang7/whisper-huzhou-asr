@@ -11,15 +11,26 @@ from src.transcribe import transcribe
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 SAMPLES = json.loads((EXAMPLES_DIR / "samples.json").read_text(encoding="utf-8"))
-SAMPLE_LABELS = [f"Clip {i + 1}" for i in range(len(SAMPLES))]
+SAMPLE_LABELS = [f"Clip {i + 1} ({'news' if s['file'].startswith('test_') else 'real speaker'})"
+                 for i, s in enumerate(SAMPLES)]
 
-# Full held-out test set: audio/N.mp3 <-> row N of text.csv
-TEST_DIR = EXAMPLES_DIR / "test_set"
-with open(TEST_DIR / "text.csv", encoding="utf-8") as f:
-    TEST_TEXTS = [row["Text"] for row in csv.DictReader(f)]
-with open(TEST_DIR / "baseline.csv", encoding="utf-8") as f:
-    TEST_BASELINE = {int(row["clip"]): row["baseline_prediction"] for row in csv.DictReader(f)}
-N_TEST = len(TEST_TEXTS)
+
+def load_test_set(folder: str) -> dict:
+    """A test set folder: audio/N.mp3 <-> row N of text.csv, plus precomputed baseline outputs."""
+    path = EXAMPLES_DIR / folder
+    with open(path / "text.csv", encoding="utf-8") as f:
+        texts = [row["Text"] for row in csv.DictReader(f)]
+    with open(path / "baseline.csv", encoding="utf-8") as f:
+        baseline = {int(row["clip"]): row["baseline_prediction"] for row in csv.DictReader(f)}
+    return {"dir": path, "folder": folder, "texts": texts, "baseline": baseline}
+
+
+# Two held-out test sets, neither used in training
+TEST_SETS = {
+    "News broadcasts": load_test_set("test_set"),  # same channel as the training data
+    "Real speakers": load_test_set("real_speakers"),  # people reading everyday sentences, mostly on phones
+}
+SET_NAMES = list(TEST_SETS)
 
 MODEL_URL = "https://huggingface.co/BillWang7/whisper-medium-ch-hz"
 GITHUB_URL = "https://github.com/BillWang7/whisper-huzhou-asr"
@@ -112,23 +123,27 @@ def run_sample(label: str) -> str:
                       baseline_note=s.get("baseline_note", "Gibberish: it has nothing to do with what was said."))
 
 
-def test_clip_path(n) -> str:
-    return str(TEST_DIR / "audio" / f"{int(n)}.mp3")
+def test_clip_path(set_name: str, n) -> str:
+    return str(TEST_SETS[set_name]["dir"] / "audio" / f"{int(n)}.mp3")
 
 
-def select_test(n):
-    return test_clip_path(n), placeholder(f"Test clip #{int(n)} loaded. Press Transcribe.")
+def select_set(set_name: str):
+    return gr.update(maximum=len(TEST_SETS[set_name]["texts"]) - 1, value=0)
 
 
-def random_test() -> int:
-    return random.randrange(N_TEST)
+def select_test(set_name: str, n):
+    return test_clip_path(set_name, n), placeholder(f"{set_name} clip #{int(n)} loaded. Press Transcribe.")
 
 
-def run_test(n) -> str:
-    n = int(n)
-    return comparison(TEST_TEXTS[n], transcribe(test_clip_path(n)), TEST_BASELINE.get(n),
+def random_test(set_name: str) -> int:
+    return random.randrange(len(TEST_SETS[set_name]["texts"]))
+
+
+def run_test(set_name: str, n) -> str:
+    n, t = int(n), TEST_SETS[set_name]
+    return comparison(t["texts"][n], transcribe(test_clip_path(set_name, n)), t["baseline"].get(n),
                       baseline_missing="Not computed for this clip",
-                      ref_caption=f"Test clip #{n}. Reference transcript from examples/test_set/text.csv.")
+                      ref_caption=f"{set_name} clip #{n}. Reference transcript from examples/{t['folder']}/text.csv.")
 
 
 def run_own(audio_path: str | None) -> str:
@@ -148,10 +163,13 @@ CSS = """
 .stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 4px; }
 .stat { flex: 1 1 180px; padding: 12px 16px; border-radius: 12px;
         border: 1px solid var(--border-color-primary); background: var(--block-background-fill); }
+.stat .set { font-weight: 600; font-size: 0.9em; opacity: 0.85; }
+.stat .pair { display: flex; align-items: baseline; gap: 8px; margin: 2px 0; }
 .stat .num { font-size: 1.6em; font-weight: 700; }
+.stat .num.good { color: #16a34a; }
+.stat .num.bad { color: #dc2626; }
+.stat .vs { opacity: 0.6; }
 .stat .lbl { font-size: 0.85em; opacity: 0.75; }
-.stat.good .num { color: #16a34a; }
-.stat.bad .num { color: #dc2626; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px; }
 .tile { padding: 16px 20px; border-radius: 14px; border: 1px solid var(--border-color-primary);
         background: var(--block-background-fill); border-top-width: 6px; }
@@ -197,9 +215,12 @@ HEADER = f"""
 standard speech recognition handles poorly. Output is written in Mandarin characters.
 <a href="{MODEL_URL}" target="_blank">Model on Hugging Face</a> · <a href="{GITHUB_URL}" target="_blank">Code on GitHub</a></p>
 <div class="stats">
-  <div class="stat good"><div class="num">26.7%</div><div class="lbl">Fine-tuned character error rate</div></div>
-  <div class="stat bad"><div class="num">98.8%</div><div class="lbl">Baseline Whisper-medium error rate</div></div>
-  <div class="stat"><div class="num">3.7×</div><div class="lbl">fewer errors (all 1,705 held-out clips)</div></div>
+  <div class="stat"><div class="set">News broadcasts · 1,705 held-out clips</div>
+    <div class="pair"><span class="num good">26.7%</span><span class="vs">vs</span><span class="num bad">98.8%</span></div>
+    <div class="lbl">character error rate: fine-tuned vs baseline Whisper</div></div>
+  <div class="stat"><div class="set">Real speakers · 828 everyday sentences</div>
+    <div class="pair"><span class="num good">55.6%</span><span class="vs">vs</span><span class="num bad">93.5%</span></div>
+    <div class="lbl">character error rate: fine-tuned vs baseline Whisper</div></div>
 </div>
 </div>
 """
@@ -209,7 +230,8 @@ with gr.Blocks(title="Huzhou Dialect ASR", css=CSS, theme=gr.themes.Soft(primary
 
     with gr.Tabs():
         with gr.Tab("🎧 Featured clips"):
-            gr.Markdown("Hand-picked Huzhou dialect clips the model never trained on, with English translations.")
+            gr.Markdown("Hand-picked Huzhou dialect clips the model never trained on, with English translations: "
+                        "news broadcasts, and real speakers reading everyday sentences.")
             sample_pick = gr.Radio(SAMPLE_LABELS, value=SAMPLE_LABELS[0], label="Sample clips")
             sample_audio = gr.Audio(value=str(EXAMPLES_DIR / SAMPLES[0]["file"]), type="filepath",
                                     interactive=False, label="Audio")
@@ -219,18 +241,24 @@ with gr.Blocks(title="Huzhou Dialect ASR", css=CSS, theme=gr.themes.Soft(primary
             sample_btn.click(run_sample, sample_pick, sample_out)
 
         with gr.Tab("🎲 Random test clip"):
-            gr.Markdown(f"Don't trust hand-picked examples? Roll a random clip from all {N_TEST:,} held-out test "
-                        "clips (good and bad), or choose one by number. "
-                        "Clips and transcripts are in `examples/test_set/`.")
+            gr.Markdown("Don't trust hand-picked examples? Roll a random clip (good and bad) from either held-out "
+                        "test set, or choose one by number. **News broadcasts** are from the same TV channel as the "
+                        "training data; **real speakers** are people reading everyday sentences, mostly recorded on "
+                        "phones, which is harder. Clips and transcripts are in `examples/test_set/` and "
+                        "`examples/real_speakers/`.")
+            test_set = gr.Radio(SET_NAMES, value=SET_NAMES[0], label="Test set")
             with gr.Row(equal_height=True):
-                test_num = gr.Slider(0, N_TEST - 1, value=0, step=1, label="Test clip number", scale=4)
+                test_num = gr.Slider(0, len(TEST_SETS[SET_NAMES[0]]["texts"]) - 1, value=0, step=1,
+                                     label="Clip number", scale=4)
                 rand_btn = gr.Button("🎲 Random clip", scale=1)
-            test_audio = gr.Audio(value=test_clip_path(0), type="filepath", interactive=False, label="Test clip")
+            test_audio = gr.Audio(value=test_clip_path(SET_NAMES[0], 0), type="filepath", interactive=False,
+                                  label="Test clip")
             test_btn = gr.Button("Transcribe", variant="primary")
             test_out = gr.HTML(placeholder("Pick a clip, then press Transcribe."))
-            test_num.change(select_test, test_num, [test_audio, test_out])
-            rand_btn.click(random_test, None, test_num)
-            test_btn.click(run_test, test_num, test_out)
+            test_set.change(select_set, test_set, test_num).then(select_test, [test_set, test_num], [test_audio, test_out])
+            test_num.change(select_test, [test_set, test_num], [test_audio, test_out])
+            rand_btn.click(random_test, test_set, test_num)
+            test_btn.click(run_test, [test_set, test_num], test_out)
 
         with gr.Tab("🎙️ Your own audio"):
             gr.Markdown("Upload a recording of Huzhou dialect (MP3, WAV, M4A…), or switch to the microphone "
@@ -242,13 +270,15 @@ with gr.Blocks(title="Huzhou Dialect ASR", css=CSS, theme=gr.themes.Soft(primary
 
     gr.Markdown(
         "<small>\\* <b>Baseline outputs are precomputed, not run live.</b> They were generated once in advance by "
-        "running the original <code>openai/whisper-medium</code> on every test clip, with the same settings "
+        "running the unmodified <code>openai/whisper-medium</code> on every test clip, with the same settings "
         "(language: Chinese, task: transcribe, same loop guard), and saved with the demo, so you don't need to download a second model. "
         "The fine-tuned model's output is computed live every time you press Transcribe.<br>"
         "Runs on CPU, so a transcription can take several seconds. "
         "Error rates are character error rate (CER): edit distance divided by reference length, ignoring punctuation, "
         "which can exceed 100% when the output is longer than the reference. "
-        "Featured and random clips are from the held-out test set, which the model never trained on.</small>"
+        "All featured and random clips are held out: none were used in training. Real-speaker sentences come "
+        "from everyday dialogue and narration, so word choices the model renders differently count as errors "
+        "even when the meaning is kept.</small>"
     )
 
 if __name__ == "__main__":

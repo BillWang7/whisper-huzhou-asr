@@ -2,12 +2,13 @@
 
 Speech-to-text for **Huzhou dialect (湖州话)**, a Wu Chinese dialect that standard speech
 recognition can't handle. I fine-tuned OpenAI's Whisper-medium on about 13 hours of Huzhou dialect
-audio, and cut the character error rate from **98.8% to 26.7%**.
+audio. On held-out news clips it cuts the character error rate from **98.8% to 26.7%**, and on
+real people reading everyday sentences from **93.5% to 55.6%**.
 
 This repo is an interactive demo with three tabs:
 
 - **Featured clips:** hand-picked test clips with English translations, compared against baseline Whisper
-- **Random test clip:** run any of the 1,705 held-out test clips yourself, or roll a random one
+- **Random test clip:** run any of the 2,533 held-out clips (news broadcasts or real speakers), or roll a random one
 - **Your own audio:** upload a file or record yourself
 
 | | |
@@ -27,17 +28,19 @@ has no standard written form, so turning speech into simplified Chinese characte
 
 ## Results
 
-Character error rate (CER) on held-out test clips the model never trained on:
+Character error rate (CER, lower is better) on two held-out test sets, neither used in training:
 
-| Model | CER |
-|---|---|
-| Whisper-medium (baseline) | 98.8% |
-| **Fine-tuned (this project)** | **26.7%** |
+| Test set | Clips | Whisper-medium (baseline) | **Fine-tuned (this project)** |
+|---|---:|---:|---:|
+| News broadcasts (same channel as training) | 1,705 | 98.8% | **26.7%** |
+| Real speakers (everyday sentences, mostly phone recordings) | 828 | 93.5% | **55.6%** |
 
-Mean CER per-clip on all 1,705 test clips; both models use identical decoding settings
-([`src/decoding.py`](src/decoding.py)). The fine-tuned model is better on 1,678 clips and gets 278 exactly
-right; the baseline's median CER is 100%, meaning a typical clip gets essentially nothing right.
-Full method, confidence intervals and error analysis: **[technical report](docs/technical-report.md)**.
+Mean CER per clip; both models use identical decoding settings ([`src/decoding.py`](src/decoding.py)).
+On news, the fine-tuned model is better on 1,678 clips and gets 278 exactly right. On real speakers it is
+better on 723 clips: still far ahead of the baseline, but with twice the news error rate, because people
+speak differently from TV anchors and the model learned news phrasing (it sometimes inserts news words like
+女士, "Ms."). Full method, confidence intervals and error analysis:
+**[technical report](docs/technical-report.md)**.
 
 | | Example |
 |---|---|
@@ -85,9 +88,10 @@ scripts/run_test_set.py  Runs either model over the whole test set (uses an Appl
 scripts/score.py         Scores both models' outputs
 data_pipeline/           How the dataset was built: subtitle OCR, alignment, cleaning, train/test split
 tests/                   Unit tests for the pipeline rules and CER (python -m unittest discover tests)
-examples/                5 featured clips (with English translations)
-examples/test_set/       Held-out test set: 1,705 clips (audio/), transcripts (text.csv),
+examples/                8 featured clips (with English translations)
+examples/test_set/       News test set: 1,705 clips (audio/), transcripts (text.csv),
                          per-clip outputs of both models (baseline.csv, finetuned.csv)
+examples/real_speakers/  Real-speaker test set: 828 clips, same layout
 docs/technical-report.md Full write-up
 Dockerfile               Reproducible environment (Python 3.10, CPU PyTorch)
 requirements.txt         Exact package versions
@@ -98,12 +102,15 @@ requirements.txt         Exact package versions
 On a machine with Python and the packages from `requirements.txt` (a GPU makes this much faster):
 
 ```bash
-python -m scripts.run_test_set baseline
+python -m scripts.run_test_set baseline                 # news test set
 python -m scripts.run_test_set finetuned
-python -m scripts.score
+python -m scripts.run_test_set baseline --set real      # real speakers
+python -m scripts.run_test_set finetuned --set real
+python -m scripts.score                                 # prints every number above
 ```
 
 ## Known Limitations
 
-- Trained only on news broadcast audio.
-- Training clips are less than 15 seconds long, so the mdoel struggles with longer audio samples. 
+- Trained only on news broadcast audio. It works on ordinary speakers too, but with about twice the errors
+  (55.6% vs 26.7% CER).
+- Training clips are less than 15 seconds long, so the model struggles with longer audio samples. 

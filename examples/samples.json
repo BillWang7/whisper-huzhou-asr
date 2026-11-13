@@ -39,5 +39,31 @@
     "expected_finetuned": "喜欢游古镇的那么湖州西塘离湖州都很近",
     "finetuned_note": "Misheard the town name 乌镇 (Wuzhen) as 那么湖州 (\"so, Huzhou\").",
     "baseline": "只会与狗子一样,干嘛无争其达,利用群里,是没经验"
+  },
+  {
+    "file": "real_675.mp3",
+    "reference": "几个领导在你办公室等着视察呢",
+    "english": "A few leaders are waiting in your office for an inspection.",
+    "expected_finetuned": "几个领导在你办公室等着视察呢",
+    "finetuned_note": "",
+    "baseline": "是个令狼,有了那片空心,等着死餐呢"
+  },
+  {
+    "file": "real_566.mp3",
+    "reference": "他们未必等得了半年",
+    "english": "They may not be able to wait half a year.",
+    "expected_finetuned": "他们不一定等得了半年",
+    "finetuned_note": "Same meaning in different words: 未必 and 不一定 both mean \"not necessarily\". The error rate still counts every changed character.",
+    "baseline": "加淀粉",
+    "baseline_note": "Unrelated to what was said: it means \"add starch\"."
+  },
+  {
+    "file": "real_39.mp3",
+    "reference": "财主家里有个叫狗四的管家是个坏家伙",
+    "english": "The landlord had a steward called Gou Si, a nasty piece of work.",
+    "expected_finetuned": "才子家里有个叫狗四弟管家是个外家伙",
+    "finetuned_note": "Sound-alike mistakes: 财主 (landlord) became 才子 (scholar) and 坏 (bad) became 外 (outside); the sentence structure is right.",
+    "baseline": "这次家里有个叫高石的国家是个娃家",
+    "baseline_note": "Gets the sentence frame (\"…had someone called … who was a …\") but garbles the names and key words."
   }
 ]

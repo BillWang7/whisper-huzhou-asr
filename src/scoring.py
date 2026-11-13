@@ -25,11 +25,15 @@ def align(reference: str, prediction: str) -> list[tuple[str | None, str | None]
     pairs, i, j = [], n, m
     while i or j:
         if i and j and dp[i][j] == dp[i - 1][j - 1] + (ref[i - 1] != hyp[j - 1]):
-            pairs.append((ref[i - 1], hyp[j - 1])); i -= 1; j -= 1
+            pairs.append((ref[i - 1], hyp[j - 1]))
+            i -= 1
+            j -= 1
         elif i and dp[i][j] == dp[i - 1][j] + 1:
-            pairs.append((ref[i - 1], None)); i -= 1
+            pairs.append((ref[i - 1], None))
+            i -= 1
         else:
-            pairs.append((None, hyp[j - 1])); j -= 1
+            pairs.append((None, hyp[j - 1]))
+            j -= 1
     return pairs[::-1]
 
 
