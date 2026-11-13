@@ -16,7 +16,7 @@ DEVICE = torch.device(
 )
 
 processor = WhisperProcessor.from_pretrained(
-    "openai/whisper-medium"
+    MODEL_ID
 )
 
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
