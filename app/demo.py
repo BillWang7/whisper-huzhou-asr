@@ -160,7 +160,7 @@ def random_test() -> int:
 def run_test(n) -> str:
     n = int(n)
     return comparison(TEST_TEXTS[n], transcribe(test_clip_path(n)), TEST_BASELINE.get(n),
-                      baseline_missing="Not computed for this clip (only for clips 0–99)",
+                      baseline_missing="Not computed for this clip",
                       ref_caption=f"Test clip #{n}. Reference transcript from examples/test_set/text.csv.")
 
 
@@ -229,9 +229,9 @@ HEADER = f"""
 standard speech recognition handles poorly. Output is written in Mandarin characters.
 <a href="{MODEL_URL}" target="_blank">Model on Hugging Face</a> · <a href="{GITHUB_URL}" target="_blank">Code on GitHub</a></p>
 <div class="stats">
-  <div class="stat good"><div class="num">22.8%</div><div class="lbl">Fine-tuned character error rate</div></div>
-  <div class="stat bad"><div class="num">120.7%</div><div class="lbl">Baseline Whisper-medium error rate</div></div>
-  <div class="stat"><div class="num">5×</div><div class="lbl">fewer errors (same 100 held-out clips)</div></div>
+  <div class="stat good"><div class="num">26.8%</div><div class="lbl">Fine-tuned character error rate</div></div>
+  <div class="stat bad"><div class="num">122.0%</div><div class="lbl">Baseline Whisper-medium error rate</div></div>
+  <div class="stat"><div class="num">4.5×</div><div class="lbl">fewer errors (all 1,705 held-out clips)</div></div>
 </div>
 </div>
 """
@@ -274,9 +274,8 @@ with gr.Blocks(title="Huzhou Dialect ASR", css=CSS, theme=gr.themes.Soft(primary
 
     gr.Markdown(
         "<small>\\* <b>Baseline outputs are precomputed, not run live.</b> They were generated once in advance by "
-        "running the original <code>openai/whisper-medium</code> on each sample clip, with the same settings "
+        "running the original <code>openai/whisper-medium</code> on every test clip, with the same settings "
         "(language: Chinese, task: transcribe), and saved with the demo, so you don't need to download a second model. "
-        "For the full test set, baseline results exist for clips 0–99, from the original evaluation. "
         "The fine-tuned model's output is computed live every time you press Transcribe.<br>"
         "Runs on CPU, so a transcription can take several seconds. "
         "Error rates are character error rate (CER): edit distance divided by reference length, "

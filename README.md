@@ -2,7 +2,7 @@
 
 Speech-to-text for **Huzhou dialect (湖州话)**, a Wu Chinese dialect that standard speech
 recognition can't handle. I fine-tuned OpenAI's Whisper-medium on about 15 hours of Huzhou dialect
-audio, and cut the character error rate from **120.7% to 22.8%**.
+audio, and cut the character error rate from **122.0% to 26.8%**.
 
 This repo is an interactive demo with three tabs:
 
@@ -27,10 +27,12 @@ Character error rate (CER) on held-out test clips the model never trained on:
 
 | Model | CER |
 |---|---|
-| Whisper-medium (baseline) | 120.7% |
-| **Fine-tuned (this project)** | **22.8%** |
+| Whisper-medium (baseline) | 122.0% |
+| **Fine-tuned (this project)** | **26.8%** |
 
-Measured on the same 100 test clips. On the full 1,705-clip test set, the fine-tuned model scores 26.8%.
+Measured on all 1,705 test clips, with both models set to transcribe Chinese. CER can go above 100% when
+the output is longer than what was said: baseline Whisper sometimes gets stuck repeating one character.
+Its median CER is 100%, meaning a typical clip gets essentially nothing right.
 
 | | Example |
 |---|---|
@@ -68,13 +70,14 @@ Training code and per-clip results are in the [model repo](https://huggingface.c
 ## Project layout
 
 ```
-app/demo.py          Gradio web app (featured clips, random test clip, your own audio)
-src/transcribe.py    Loads the model and transcribes audio
-examples/            5 featured clips (with English translations) + precomputed baseline outputs
-examples/test_set/   Full held-out test set: 1,705 clips, transcripts (text.csv),
-                     baseline outputs for clips 0–99 (baseline.csv)
-Dockerfile           Reproducible environment (Python 3.10, CPU PyTorch)
-requirements.txt     Exact package versions
+app/demo.py              Gradio web app (featured clips, random test clip, your own audio)
+src/transcribe.py        Loads the model and transcribes audio
+scripts/run_baseline.py  Regenerates baseline.csv (uses an Apple or NVIDIA GPU if available)
+examples/                5 featured clips (with English translations) + precomputed baseline outputs
+examples/test_set/       Full held-out test set: 1,705 clips, transcripts (text.csv),
+                         baseline Whisper outputs for every clip (baseline.csv)
+Dockerfile               Reproducible environment (Python 3.10, CPU PyTorch)
+requirements.txt         Exact package versions
 ```
 
 ## Limitations
