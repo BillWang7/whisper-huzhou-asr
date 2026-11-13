@@ -1,0 +1,43 @@
+[
+  {
+    "file": "test_190.mp3",
+    "reference": "来湖州旅游不但能欣赏到绿水青山",
+    "english": "Visiting Huzhou, you can not only enjoy clear rivers and green mountains",
+    "expected_finetuned": "到湖州旅游不但能欣赏到绿水青山",
+    "finetuned_note": "Small slip: 来 (\"come to\") became 到 (\"go to\"). The meaning is unchanged.",
+    "baseline": "到5G的利益,不得能给新商家了水清洗"
+  },
+  {
+    "file": "test_926.mp3",
+    "reference": "记者来到湖州市机动车驾驶考试服务中心",
+    "english": "A reporter visited the Huzhou Motor Vehicle Driving Test Center",
+    "expected_finetuned": "记者来到湖州市机动车驾驶考试服务中心",
+    "finetuned_note": "",
+    "baseline": "這裡到5G日期中處加斯科斯佛重型"
+  },
+  {
+    "file": "test_167.mp3",
+    "reference": "这位老人叫席中科今年94岁了",
+    "english": "This elderly man is named Xi Zhongke, and he is 94 years old this year",
+    "expected_finetuned": "这位老人叫薛中科今年94岁",
+    "finetuned_note": "Misheard the surname 席 (Xi) as 薛 (Xue) and dropped the final particle 了.",
+    "baseline": "这个老人家叫中科,跟你讲就是手术",
+    "baseline_note": "Starts roughly right (\"this old man is called Zhongke\"), then turns into gibberish (\"let me tell you, it's surgery\")."
+  },
+  {
+    "file": "test_1424.mp3",
+    "reference": "青塘小区是一个高度老龄化的老小区",
+    "english": "Qingtang is an old neighborhood with a large elderly population",
+    "expected_finetuned": "青塘小区是一个高度老龄化的老小区",
+    "finetuned_note": "",
+    "baseline": "青銅小池是一個高的龍領湖的龍小池"
+  },
+  {
+    "file": "test_368.mp3",
+    "reference": "喜欢游古镇的乌镇西塘离湖州都很近",
+    "english": "For people who like ancient water towns, Wuzhen and Xitang are both close to Huzhou",
+    "expected_finetuned": "喜欢游古镇的那么湖州西塘离湖州都很近",
+    "finetuned_note": "Misheard the town name 乌镇 (Wuzhen) as 那么湖州 (\"so, Huzhou\").",
+    "baseline": "只会与狗子一样,干嘛无争其达,利用群里,是没经验"
+  }
+]

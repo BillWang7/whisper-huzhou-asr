@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 # Copy application code
 COPY src/ ./src/
 COPY app/ ./app/
+COPY examples/ ./examples/
 
 # Configure Gradio to listen outside the container
 ENV GRADIO_SERVER_NAME=0.0.0.0
