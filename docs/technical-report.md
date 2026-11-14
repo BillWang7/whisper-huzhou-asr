@@ -193,11 +193,6 @@ Typical fine-tuned errors are personal and place names (席 → 薛 above) and n
 | Whisper-medium (baseline) | 93.5% (92.2–94.9) | 100.0% | 0 | 114 |
 | **Fine-tuned** | **55.6% (53.7–57.5)** | **50.5%** | **13** | 28 |
 
-| Part | Clips | Fine-tuned | Baseline |
-|---|---:|---:|---:|
-| App recordings (everyday sentences, phone audio) | 728 | 55.8% | 94.6% |
-| Read-aloud recordings (folk tale, leaflet, essay) | 100 | 53.9% | 85.5% |
-
 The fine-tuned model is better than the baseline on 723 of 828 clips, ties on 54 and is worse on 51, and
 it is better across all lengths (≤ 9 characters: 58.9% vs 97.1%; ≥ 15 characters: 50.7% vs 87.1%). Its
 error rate is roughly double the news result, for three visible reasons:
