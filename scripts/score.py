@@ -18,6 +18,7 @@ SETS = [
     ("Real speakers", Path("examples/real_speakers")),
 ]
 MODELS = [("baseline", "baseline_prediction"), ("finetuned", "finetuned_prediction")]
+LENGTHS = [("<=9 chars", 0, 9), ("10-14 chars", 10, 14), (">=15 chars", 15, 10**6)]  # reference length
 
 
 def read_rows(path: Path) -> list[dict]:
@@ -34,7 +35,7 @@ def ci95(values: list[float]) -> tuple[float, float]:
 
 def line(label: str, cers: list[float]) -> str:
     low, high = ci95(cers)
-    return (f"  {label:22} n={len(cers):5}  mean CER {statistics.mean(cers):5.1f}% (95% CI {low:.1f}-{high:.1f})  "
+    return (f"  {label:25} n={len(cers):5}  mean CER {statistics.mean(cers):5.1f}% (95% CI {low:.1f}-{high:.1f})  "
             f"median {statistics.median(cers):5.1f}%  exact {sum(c == 0 for c in cers):4}  over 100% {sum(c > 100 for c in cers):4}")
 
 
@@ -47,8 +48,12 @@ for set_name, folder in SETS:
             continue
         preds = [r[column] for r in read_rows(folder / f"{model}.csv")]
         assert len(preds) == len(refs), f"{folder}/{model}.csv: {len(preds)} rows, expected {len(refs)}"
-        cers = [score(r["Text"], p)[0] for r, p in zip(refs, preds)]
+        scored = [score(r["Text"], p) for r, p in zip(refs, preds)]
+        cers = [s[0] for s in scored]
         print(line(model, cers))
         subsets = sorted({r["set"] for r in refs if "set" in r})
         for subset in subsets:
             print(line(f"  {model}, {subset}", [c for c, r in zip(cers, refs) if r["set"] == subset]))
+        # Short references are penalised more: one wrong character in 5 is 20%, in 20 it is 5%.
+        for label, low, high in LENGTHS:
+            print(line(f"  {model}, {label}", [s[0] for s in scored if low <= s[2] <= high]))

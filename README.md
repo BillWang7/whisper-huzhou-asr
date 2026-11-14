@@ -42,6 +42,16 @@ speak differently from TV anchors and the model learned news phrasing (it someti
 女士, "Ms."). Full method, confidence intervals and error analysis:
 **[technical report](docs/technical-report.md)**.
 
+**Reading the 55.6%.** CER counts changed characters, not wrong sentences, so it overstates how much is lost:
+- **Synonyms count as errors.** Huzhou dialect has no standard written form, so there is more than one correct
+  way to write a sentence in Mandarin. The model often picks a different one: 他们未必等得了半年 → 他们不一定等得了半年
+  ("they may not be able to wait half a year") means the same thing but scores 33%.
+- **Short sentences are penalised more.** Errors are divided by the sentence length, so one swapped word in a
+  6-character sentence costs 17–33%. 42% of real-speaker sentences have 9 characters or fewer (21% on news), and
+  those score worst (58.9% vs 50.7% for 15+ characters).
+
+How often the meaning is fully kept hasn't been measured; try the real-speaker clips in the demo to judge.
+
 | | Example |
 |---|---|
 | What was said | 青塘小区是一个高度老龄化的老小区 *("Qingtang is an old neighborhood with a large elderly population")* |

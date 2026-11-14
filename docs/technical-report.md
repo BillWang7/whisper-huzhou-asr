@@ -210,6 +210,18 @@ error rate is roughly double the news result, for three visible reasons:
   against 918 deletions and 539 insertions).
 - **Recording conditions.** Most clips are 8 kHz phone recordings by untrained speakers, while training
   audio is studio-quality broadcast sound.
+- **Short sentences.** CER divides the errors by the length of the reference, so on a short sentence each
+  wrong character costs more: one synonym swap in a 6-character sentence is 17–33%, the same swap in a
+  20-character sentence 5–10%. Real-speaker sentences are short (42% have 9 characters or fewer, against
+  21% of news clips), and the short ones score worst (58.9%, against 50.7% for 15 characters or more).
+  Length explains part of the gap, not all of it: even on long sentences the news error rate is half
+  (24.6%).
+
+**What 55.6% means in practice.** CER is not a percentage of sentences that are wrong or unintelligible. A
+transcript at 50% CER often reads as the right sentence in different words, because Huzhou dialect has no
+standard written form and there is more than one correct way to write it in Mandarin; the paraphrase
+example above is a typical case. We have not measured how often the meaning is fully kept, which would need
+human judgement; the featured and random clips in the demo let a reader check this directly.
 
 CER therefore overstates how much meaning is lost, but the gap to the news result is real and is the main
 target for future work: training data from more speakers and settings.
