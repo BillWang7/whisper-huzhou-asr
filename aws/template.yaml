@@ -4,6 +4,19 @@ Description: >
   Huzhou dialect ASR, serverless. Website + REST API (API Gateway -> API Lambda), audio uploads to S3,
   S3 upload triggers a containerized Whisper Lambda, results stored in DynamoDB.
 
+Parameters:
+  DomainName:
+    Type: String
+    Default: ""
+    Description: Your own web address for the site (e.g. huzhou-asr.com). Empty = only the AWS-generated address.
+  HostedZoneId:
+    Type: String
+    Default: ""
+    Description: The Route 53 hosted zone of DomainName (Route 53 creates it when you register the domain)
+
+Conditions:
+  HasDomain: !Not [!Equals [!Ref DomainName, ""]]
+
 Resources:
   # ---------- Storage ----------
   AudioBucket:
@@ -119,7 +132,79 @@ Resources:
         ThrottlingBurstLimit: 10
         ThrottlingRateLimit: 5
 
+  # ---------- Own domain (only when DomainName is set) ----------
+  # huzhou-asr.com and www.huzhou-asr.com both serve the site; the AWS-generated address keeps working too.
+  SiteCertificate:  # free HTTPS certificate; CloudFormation adds the DNS record that proves we own the domain
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames: [!Sub "www.${DomainName}"]
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - { DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId }
+        - { DomainName: !Sub "www.${DomainName}", HostedZoneId: !Ref HostedZoneId }
+
+  SiteDomain:
+    Type: AWS::ApiGatewayV2::DomainName
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref DomainName
+      DomainNameConfigurations:
+        - { CertificateArn: !Ref SiteCertificate, EndpointType: REGIONAL, SecurityPolicy: TLS_1_2 }
+
+  SiteWwwDomain:
+    Type: AWS::ApiGatewayV2::DomainName
+    Condition: HasDomain
+    Properties:
+      DomainName: !Sub "www.${DomainName}"
+      DomainNameConfigurations:
+        - { CertificateArn: !Ref SiteCertificate, EndpointType: REGIONAL, SecurityPolicy: TLS_1_2 }
+
+  SiteMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Condition: HasDomain
+    DependsOn: ApiApiGatewayDefaultStage  # the stage SAM creates for the HTTP API
+    Properties:
+      DomainName: !Ref SiteDomain
+      ApiId: !Ref Api
+      Stage: $default
+
+  SiteWwwMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Condition: HasDomain
+    DependsOn: ApiApiGatewayDefaultStage
+    Properties:
+      DomainName: !Ref SiteWwwDomain
+      ApiId: !Ref Api
+      Stage: $default
+
+  SiteDnsRecord:  # huzhou-asr.com -> API Gateway
+    Type: AWS::Route53::RecordSet
+    Condition: HasDomain
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt SiteDomain.RegionalDomainName
+        HostedZoneId: !GetAtt SiteDomain.RegionalHostedZoneId
+
+  SiteWwwDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasDomain
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "www.${DomainName}"
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt SiteWwwDomain.RegionalDomainName
+        HostedZoneId: !GetAtt SiteWwwDomain.RegionalHostedZoneId
+
 Outputs:
+  OwnDomainUrl:
+    Condition: HasDomain
+    Value: !Sub "https://${DomainName}/"
   WebsiteUrl:
     Description: Open this in a browser
     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/"

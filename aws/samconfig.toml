@@ -7,6 +7,8 @@ resolve_image_repos = true
 capabilities = ["CAPABILITY_IAM"]
 confirm_changeset = false
 fail_on_empty_changeset = false
+# Own domain (Route 53 registered domain + its hosted zone); remove this line to serve only the AWS-generated address
+parameter_overrides = "DomainName=huzhou-asr.com HostedZoneId=Z09183583RRIEIRL0XFCJ"
 
 [default.build.parameters]
 use_buildkit = true  # Dockerfile.ct2 converts the model natively, then copies it into the Lambda's platform

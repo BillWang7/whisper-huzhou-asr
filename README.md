@@ -5,7 +5,7 @@ recognition can't handle. I fine-tuned OpenAI's Whisper-medium on about 13 hours
 audio. On held-out news clips it cuts the character error rate from **98.8% to 26.7%**, and on
 real people reading everyday sentences from **93.6% to 55.3%**.
 
-**▶ Try it live: [jo3j4k9ieg.execute-api.us-east-2.amazonaws.com](https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/)**
+**▶ Try it live: [huzhou-asr.com](https://huzhou-asr.com)**
 (serverless on AWS; a transcription takes ~15 s, up to a minute if the site has been idle)
 
 The demo has three tabs:
@@ -18,7 +18,7 @@ The demo has three tabs:
 |---|---|
 | **Model** | [BillWang7/whisper-medium-ch-hz](https://huggingface.co/BillWang7/whisper-medium-ch-hz) |
 | **Dataset** | [BillWang7/huzhou-dialect-speech](https://huggingface.co/datasets/BillWang7/huzhou-dialect-speech) |
-| **Live demo** | [AWS (serverless)](https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/): how it's built in [`aws/`](aws/README.md) |
+| **Live demo** | [AWS (serverless)](https://huzhou-asr.com): how it's built in [`aws/`](aws/README.md) |
 
 ## Inspiration
 
@@ -64,7 +64,7 @@ How often the meaning is fully kept hasn't been measured; try the real-speaker c
 
 ## Live demo on AWS
 
-The [live site](https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/) has the same three tabs as the Gradio app,
+The [live site](https://huzhou-asr.com) has the same three tabs as the Gradio app,
 on a serverless AWS stack that costs close to nothing when nobody is using it:
 
 ```

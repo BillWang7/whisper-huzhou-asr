@@ -3,7 +3,8 @@
 The fine-tuned model ([BillWang7/whisper-medium-ch-hz](https://huggingface.co/BillWang7/whisper-medium-ch-hz)) as a
 public website that costs nothing while nobody is using it.
 
-**Live:** https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/ (stack `whisper-huzhou`, us-east-2 / Ohio)
+**Live:** https://huzhou-asr.com (also www.huzhou-asr.com, and the AWS-generated address https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/; stack
+`whisper-huzhou`, us-east-2 / Ohio)
 
 **Status (15 Nov 2026): working.** Upload an audio file on the page; the transcript appears about 15–17 s later, or
 about 25–60 s later if nobody has used the site for a while (a "cold start": Lambda has to start a fresh copy).
@@ -140,6 +141,9 @@ clip 1: ours 7%, baseline 93%), phone width and dark mode. 19 unit tests (`tests
 - **Asynchronous jobs**: the S3 event invokes the transcriber asynchronously, and the page polls `GET /jobs/{id}`. A
   cold start can take longer than API Gateway's 30-second limit, so a synchronous request would time out.
 - **Audio is cut at 30 s**, the same as the Gradio demo (Whisper hears 30 s at a time).
+- **Own domain**: `huzhou-asr.com` is registered in Route 53 (auto-renew, privacy on). The template's optional
+  `DomainName` / `HostedZoneId` settings (set in `samconfig.toml`) add a free ACM certificate, API Gateway custom
+  domains for the bare name and `www`, and Route 53 alias records. Leave them empty to deploy without a domain.
 - **Cost and abuse guards**: API rate limit (5 req/s, burst 10), 10 MB upload cap, private bucket, uploads deleted
   after 7 days, on-demand DynamoDB.
 
@@ -164,8 +168,8 @@ python3 aws/scripts/build_demo_data.py      # the test clips + data for the demo
 cd aws && sam build && sam deploy --profile bill
 
 # test the live site, and measure its accuracy (first 200 news + 100 real-speaker clips, ~15 min, < $1)
-python3 aws/scripts/smoke_test.py https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/ examples/test_190.mp3
-python3 aws/scripts/eval_live.py https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/ 200 100
+python3 aws/scripts/smoke_test.py https://huzhou-asr.com/ examples/test_190.mp3
+python3 aws/scripts/eval_live.py https://huzhou-asr.com/ 200 100
 
 # delete everything from AWS
 cd aws && sam delete --stack-name whisper-huzhou --profile bill
