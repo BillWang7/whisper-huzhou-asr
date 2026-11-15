@@ -1,0 +1,10 @@
+# Transcriber Lambda (Python 3.12, arm64). Same model library versions as the main requirements.txt.
+# Audio is decoded with ffmpeg (bundled by imageio-ffmpeg), so torchaudio and Gradio aren't needed here.
+# boto3 is already included in the AWS Lambda base image.
+torch==2.5.1
+transformers==4.56.1
+tokenizers==0.22.0
+safetensors==0.6.2
+huggingface_hub==0.35.0
+numpy==2.2.6
+imageio-ffmpeg==0.6.0

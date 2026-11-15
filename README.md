@@ -3,18 +3,22 @@
 Speech-to-text for **Huzhou dialect (湖州话)**, a Wu Chinese dialect that standard speech
 recognition can't handle. I fine-tuned OpenAI's Whisper-medium on about 13 hours of Huzhou dialect
 audio. On held-out news clips it cuts the character error rate from **98.8% to 26.7%**, and on
-real people reading everyday sentences from **93.5% to 55.6%**.
+real people reading everyday sentences from **93.6% to 55.3%**.
 
-This repo is an interactive demo with three tabs:
+**▶ Try it live: [jo3j4k9ieg.execute-api.us-east-2.amazonaws.com](https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/)**
+(serverless on AWS; a transcription takes ~15 s, up to a minute if the site has been idle)
+
+The demo has three tabs:
 
 - **Featured clips:** hand-picked test clips with English translations, compared against baseline Whisper
-- **Random test clip:** run any of the 2,533 held-out clips (news broadcasts or real speakers), or roll a random one
+- **Random test clip:** run any of the 2,524 held-out clips (news broadcasts or real speakers), or roll a random one
 - **Your own audio:** upload a file or record yourself
 
 | | |
 |---|---|
 | **Model** | [BillWang7/whisper-medium-ch-hz](https://huggingface.co/BillWang7/whisper-medium-ch-hz) |
 | **Dataset** | [BillWang7/huzhou-dialect-speech](https://huggingface.co/datasets/BillWang7/huzhou-dialect-speech) |
+| **Live demo** | [AWS (serverless)](https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/): how it's built in [`aws/`](aws/README.md) |
 
 ## Inspiration
 
@@ -33,22 +37,22 @@ Character error rate (CER, lower is better) on two held-out test sets, neither u
 | Test set | Clips | Whisper-medium (baseline) | **Fine-tuned (this project)** |
 |---|---:|---:|---:|
 | News broadcasts (same channel as training) | 1,705 | 98.8% | **26.7%** |
-| Real speakers (everyday sentences, mostly phone recordings) | 828 | 93.5% | **55.6%** |
+| Real speakers (everyday sentences, mostly phone recordings) | 819 | 93.6% | **55.3%** |
 
 Mean CER per clip; both models use identical decoding settings ([`src/decoding.py`](src/decoding.py)).
 On news, the fine-tuned model is better on 1,678 clips and gets 278 exactly right. On real speakers it is
-better on 723 clips: still far ahead of the baseline, but with twice the news error rate, because people
+better on 722 clips: still far ahead of the baseline, but with twice the news error rate, because people
 speak differently from TV anchors and the model learned news phrasing (it sometimes inserts news words like
 女士, "Ms."). Full method, confidence intervals and error analysis:
 **[technical report](docs/technical-report.md)**.
 
-**Reading the 55.6%.** CER counts changed characters, not wrong sentences, so it overstates how much is lost:
+**Reading the 55.3%.** CER counts changed characters, not wrong sentences, so it overstates how much is lost:
 - **Synonyms count as errors.** Huzhou dialect has no standard written form, so there is more than one correct
   way to write a sentence in Mandarin. The model often picks a different one: 他们未必等得了半年 → 他们不一定等得了半年
   ("they may not be able to wait half a year") means the same thing but scores 33%.
 - **Short sentences are penalised more.** Errors are divided by the sentence length, so one swapped word in a
-  6-character sentence costs 17–33%. 42% of real-speaker sentences have 9 characters or fewer (21% on news), and
-  those score worst (58.9% vs 50.7% for 15+ characters).
+  6-character sentence costs 17–33%. 41% of real-speaker sentences have 9 characters or fewer (21% on news), and
+  those score worst (58.6% vs 50.7% for 15+ characters).
 
 How often the meaning is fully kept hasn't been measured; try the real-speaker clips in the demo to judge.
 
@@ -58,7 +62,30 @@ How often the meaning is fully kept hasn't been measured; try the real-speaker c
 | Fine-tuned | 青塘小区是一个高度老龄化的老小区 ✅ |
 | Baseline | 青銅小池是一個高的龍領湖的龍小池 ❌ *(gibberish: "bronze small pond is a high dragon...")* |
 
-## Run the demo
+## Live demo on AWS
+
+The [live site](https://jo3j4k9ieg.execute-api.us-east-2.amazonaws.com/) has the same three tabs as the Gradio app,
+on a serverless AWS stack that costs close to nothing when nobody is using it:
+
+```
+Browser ──▶ API Gateway ──▶ API Lambda (page, jobs, test clips)
+   │ upload (presigned S3 form)
+   ▼
+  S3 ──"new file" event──▶ Transcriber Lambda (container: Whisper in 8-bit CTranslate2) ──▶ DynamoDB ──▶ page polls for the result
+```
+
+- **Fitting the model:** Lambda has no GPU and new accounts cap memory at 3 GB, so the model is converted to 8-bit
+  [CTranslate2](https://github.com/OpenNMT/CTranslate2) (3 GB → 742 MB, no PyTorch in the image).
+- **Accuracy kept:** measured by uploading test clips through the live site, its error rate is within
+  1.3 points of the full model (first 200 news clips: 24.6% vs 23.8%; first 100 real-speaker clips: 55.2% vs 53.9%).
+  An early 1.3-point loss was traced to faster-whisper's spectrogram code, not to 8-bit, and fixed by using
+  Hugging Face's feature extractor with the same repetition guard as [`src/decoding.py`](src/decoding.py).
+- **Speed and cost:** ~13.5 s of model time per clip on 2 vCPUs (x86 measured ~30% faster than ARM), ~25–60 s
+  after idle (cold start), about $0.0007 per transcription. An always-on GPU would be ~1 s but ~$590 a month.
+- Infrastructure as code (AWS SAM): [`aws/template.yaml`](aws/template.yaml). Full write-up, measurements and
+  commands: **[`aws/README.md`](aws/README.md)**.
+
+## Run the demo locally
 
 You need [Docker](https://www.docker.com/products/docker-desktop/). No GPU required.
 
@@ -83,8 +110,10 @@ Then open **http://localhost:7860**.
 2. **Training:** full fine-tune of `openai/whisper-medium`, 4,000 steps, batch size 64, learning rate 1e-5,
    following Hugging Face's [Fine-Tune Whisper](https://huggingface.co/blog/fine-tune-whisper) guide.  Training notebooks are in the [model repo](https://huggingface.co/BillWang7/whisper-medium-ch-hz/tree/main).
 3. **Demo:** a [Gradio](https://www.gradio.app/) web app, packaged with Docker so it runs the same on any machine.
+4. **Deployment:** the same demo on AWS Lambda, with the model in 8-bit CTranslate2 ([`aws/`](aws/README.md)).
 
-The **[technical report](docs/technical-report.md)** covers the data pipeline, training curves, evaluation
+The **[technical report](docs/technical-report.md)** covers the data pipeline, training curves, evaluation and
+error analysis.
 
 
 ## Project layout
@@ -96,12 +125,14 @@ src/decoding.py          Decoding settings shared by the demo and evaluation (in
 src/scoring.py           Character error rate, shared by the demo and evaluation
 scripts/run_test_set.py  Runs either model over the whole test set (uses an Apple or NVIDIA GPU)
 scripts/score.py         Scores both models' outputs
+scripts/audio_check.py   Audio quality scan of the real-speaker clips (how the 9 bad recordings were found)
+aws/                     Serverless deployment: SAM template, transcriber + API Lambdas, web page, tests, scripts
 data_pipeline/           How the dataset was built: subtitle OCR, alignment, cleaning, train/test split
 tests/                   Unit tests for the pipeline rules and CER (python -m unittest discover tests)
 examples/                8 featured clips (with English translations)
 examples/test_set/       News test set: 1,705 clips (audio/), transcripts (text.csv),
                          per-clip outputs of both models (baseline.csv, finetuned.csv)
-examples/real_speakers/  Real-speaker test set: 828 clips, same layout
+examples/real_speakers/  Real-speaker test set: 819 clips, same layout (removed.csv: 9 dropped)
 docs/technical-report.md Full write-up
 Dockerfile               Reproducible environment (Python 3.10, CPU PyTorch)
 requirements.txt         Exact package versions
@@ -122,5 +153,5 @@ python -m scripts.score                                 # prints every number ab
 ## Known Limitations
 
 - Trained only on news broadcast audio. It works on ordinary speakers too, but with about twice the errors
-  (55.6% vs 26.7% CER).
+  (55.3% vs 26.7% CER).
 - Training clips are less than 15 seconds long, so the model struggles with longer audio samples. 

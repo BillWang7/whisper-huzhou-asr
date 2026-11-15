@@ -3,9 +3,10 @@
     python -m scripts.run_test_set baseline                  # news test set -> examples/test_set/baseline.csv
     python -m scripts.run_test_set finetuned                 # news test set -> examples/test_set/finetuned.csv
     python -m scripts.run_test_set finetuned --set real      # real speakers -> examples/real_speakers/finetuned.csv
+    python -m scripts.run_test_set runs/exp1/best --set real --out runs/exp1/real.csv   # a newly trained model
 
 Run from the repo root. Uses an NVIDIA or Apple GPU if available (the 1,705 news clips take about 35 minutes
-on an M4 MacBook's GPU, the 828 real-speaker clips about 20; much longer on CPU). Results are appended as
+on an M4 MacBook's GPU, the 819 real-speaker clips about 20; much longer on CPU). Results are appended as
 they are made, so an interrupted run picks up where it stopped. Score the results with `python -m scripts.score`.
 """
 import argparse
@@ -26,13 +27,18 @@ MODELS = {
 SETS = {"news": Path("examples/test_set"), "real": Path("examples/real_speakers")}
 
 parser = argparse.ArgumentParser()
-parser.add_argument("model", choices=MODELS)
+parser.add_argument("model", help="baseline, finetuned, or a model folder / Hugging Face id (then --out is needed)")
 parser.add_argument("--set", choices=SETS, default="news", help="news broadcasts (default) or real speakers")
 parser.add_argument("--out", help="output CSV (default: <set folder>/<model>.csv)")
 parser.add_argument("--limit", type=int, help="only the first N clips, for a quick test")
 args = parser.parse_args()
 
-model_id, column = MODELS[args.model]
+if args.model in MODELS:
+    model_id, column = MODELS[args.model]
+else:
+    model_id, column = args.model, "prediction"
+    if not args.out:
+        parser.error("--out is required for a model that isn't baseline or finetuned")
 test_dir = SETS[args.set]
 out_csv = Path(args.out or test_dir / f"{args.model}.csv")
 

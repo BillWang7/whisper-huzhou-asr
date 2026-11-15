@@ -11,6 +11,8 @@ import random
 import statistics
 from pathlib import Path
 
+import torchaudio
+
 from src.scoring import score
 
 SETS = [
@@ -39,21 +41,34 @@ def line(label: str, cers: list[float]) -> str:
             f"median {statistics.median(cers):5.1f}%  exact {sum(c == 0 for c in cers):4}  over 100% {sum(c > 100 for c in cers):4}")
 
 
-for set_name, folder in SETS:
-    refs = read_rows(folder / "text.csv")
-    print(set_name)
-    for model, column in MODELS:
-        if not (folder / f"{model}.csv").exists():
-            print(f"  {model}: no results yet (python -m scripts.run_test_set {model} --set ...)")
-            continue
-        preds = [r[column] for r in read_rows(folder / f"{model}.csv")]
-        assert len(preds) == len(refs), f"{folder}/{model}.csv: {len(preds)} rows, expected {len(refs)}"
-        scored = [score(r["Text"], p) for r, p in zip(refs, preds)]
-        cers = [s[0] for s in scored]
-        print(line(model, cers))
-        subsets = sorted({r["set"] for r in refs if "set" in r})
-        for subset in subsets:
-            print(line(f"  {model}, {subset}", [c for c, r in zip(cers, refs) if r["set"] == subset]))
-        # Short references are penalised more: one wrong character in 5 is 20%, in 20 it is 5%.
-        for label, low, high in LENGTHS:
-            print(line(f"  {model}, {label}", [s[0] for s in scored if low <= s[2] <= high]))
+def main():
+    for set_name, folder in SETS:
+        refs = read_rows(folder / "text.csv")
+        infos = [torchaudio.info(str(folder / "audio" / f"{r.get('clip', i)}.mp3")) for i, r in enumerate(refs)]
+        minutes = sum(info.num_frames / info.sample_rate for info in infos) / 60
+        print(f"{set_name}: {len(refs)} clips, {minutes:.1f} minutes of audio")
+        by_model = {}
+        for model, column in MODELS:
+            if not (folder / f"{model}.csv").exists():
+                print(f"  {model}: no results yet (python -m scripts.run_test_set {model} --set ...)")
+                continue
+            preds = [r[column] for r in read_rows(folder / f"{model}.csv")]
+            assert len(preds) == len(refs), f"{folder}/{model}.csv: {len(preds)} rows, expected {len(refs)}"
+            scored = [score(r["Text"], p) for r, p in zip(refs, preds)]
+            cers = [s[0] for s in scored]
+            by_model[model] = cers
+            print(line(model, cers))
+            subsets = sorted({r["set"] for r in refs if "set" in r})
+            for subset in subsets:
+                print(line(f"  {model}, {subset}", [c for c, r in zip(cers, refs) if r["set"] == subset]))
+            # Short references are penalised more: one wrong character in 5 is 20%, in 20 it is 5%.
+            for label, low, high in LENGTHS:
+                print(line(f"  {model}, {label}", [s[0] for s in scored if low <= s[2] <= high]))
+        if len(by_model) == 2:
+            pairs = list(zip(by_model["baseline"], by_model["finetuned"]))
+            print(f"  fine-tuned better on {sum(f < b for b, f in pairs)}, tie on {sum(f == b for b, f in pairs)}, "
+                  f"worse on {sum(f > b for b, f in pairs)} of {len(pairs)} clips")
+
+
+if __name__ == "__main__":
+    main()

@@ -11,8 +11,8 @@ character error rate (CER) of 98.8% on our test set. We built a 14.4-hour superv
 broadcasts, using OCR on burned-in subtitles to obtain transcripts, and fine-tuned Whisper-medium on
 12.9 hours of it. On 1,705 held-out news clips the fine-tuned model reaches **26.7% CER** (95% CI
 25.5–27.8%), is better than the baseline on 1,678 clips, and transcribes 278 clips exactly. On a second test
-set of 828 recordings of ordinary people reading everyday sentences, it reaches **55.6% CER** against the
-baseline's 93.5%: a large gain, but twice the in-domain error rate.
+set of 819 recordings of ordinary people reading everyday sentences, it reaches **55.3% CER** against the
+baseline's 93.6%: a large gain, but twice the in-domain error rate.
 
 ## 1. Motivation
 
@@ -136,12 +136,15 @@ repetition loop and repeats a character until it hits the length limit; without 
 15 baseline outputs; the worst baseline clip fell from 5,550% to 333% CER.
 
 **Test sets.** Two held-out sets, neither used in training. *News broadcasts* is the 1,705-clip test split
-(Section 2.3), from the same channel as the training data. *Real speakers* (828 clips, 86.6 minutes) tests
-the model outside that domain. It has two parts, both recorded with the speakers' permission: 728 clips
+(Section 2.3), from the same channel as the training data. *Real speakers* (819 clips, 86.0 minutes) tests
+the model outside that domain. It has two parts, both recorded with the speakers' permission: 719 clips
 recorded by volunteers through a phone recording app, reading one sentence each, mostly everyday dialogue
 from TV dramas and narration from travel programmes (8 kHz audio); and 100 clips from four longer recordings
 reading a folk tale, a health leaflet and an essay (48 kHz), cut into sentences by hand. One app clip whose
 sentence also appears in the training transcripts was removed; no other sentence overlaps the training data.
+Nine more app clips were removed after an audio check and listening (`examples/real_speakers/removed.csv`,
+`scripts/audio_check.py`): six nearly silent, very quiet or very noisy recordings, and three where the
+speaker said different words from the sentence.
 
 **Baseline.** The unmodified `openai/whisper-medium` with the same decoding settings. Forcing the language
 matters: without it, Whisper's language detection produced Japanese, Arabic, French and other languages
@@ -190,29 +193,29 @@ Typical fine-tuned errors are personal and place names (席 → 薛 above) and n
 
 | Model | Mean CER (95% CI) | Median CER | Exact clips | Clips over 100% |
 |---|---:|---:|---:|---:|
-| Whisper-medium (baseline) | 93.5% (92.2–94.9) | 100.0% | 0 | 114 |
-| **Fine-tuned** | **55.6% (53.7–57.5)** | **50.5%** | **13** | 28 |
+| Whisper-medium (baseline) | 93.6% (92.3–95.1) | 100.0% | 0 | 114 |
+| **Fine-tuned** | **55.3% (53.4–57.1)** | **50.0%** | **13** | 28 |
 
-The fine-tuned model is better than the baseline on 723 of 828 clips, ties on 54 and is worse on 51, and
-it is better across all lengths (≤ 9 characters: 58.9% vs 97.1%; ≥ 15 characters: 50.7% vs 87.1%). Its
+The fine-tuned model is better than the baseline on 722 of 819 clips, ties on 48 and is worse on 49, and
+it is better across all lengths (≤ 9 characters: 58.6% vs 97.5%; ≥ 15 characters: 50.7% vs 87.1%). Its
 error rate is roughly double the news result, for three visible reasons:
 
 - **Domain shift.** The model learned news language and sometimes imposes it: it inserted 女士 ("Ms.", as
   in news interviews' "Ms. X said") into 14 transcripts whose reference never contains it.
 - **Paraphrase.** Training transcripts are Mandarin subtitles, which often reword the dialect. The model
   learned to do the same, so meaning-preserving rewrites count as errors: 他们未必等得了半年 → 他们不一定等得了半年
-  (both "they may not be able to wait half a year") scores 33%. Errors are mostly substitutions (4,076,
-  against 918 deletions and 539 insertions).
+  (both "they may not be able to wait half a year") scores 33%. Errors are mostly substitutions (4,045,
+  against 892 deletions and 537 insertions).
 - **Recording conditions.** Most clips are 8 kHz phone recordings by untrained speakers, while training
   audio is studio-quality broadcast sound.
 - **Short sentences.** CER divides the errors by the length of the reference, so on a short sentence each
   wrong character costs more: one synonym swap in a 6-character sentence is 17–33%, the same swap in a
-  20-character sentence 5–10%. Real-speaker sentences are short (42% have 9 characters or fewer, against
-  21% of news clips), and the short ones score worst (58.9%, against 50.7% for 15 characters or more).
+  20-character sentence 5–10%. Real-speaker sentences are short (41% have 9 characters or fewer, against
+  21% of news clips), and the short ones score worst (58.6%, against 50.7% for 15 characters or more).
   Length explains part of the gap, not all of it: even on long sentences the news error rate is half
   (24.6%).
 
-**What 55.6% means in practice.** CER is not a percentage of sentences that are wrong or unintelligible. A
+**What 55.3% means in practice.** CER is not a percentage of sentences that are wrong or unintelligible. A
 transcript at 50% CER often reads as the right sentence in different words, because Huzhou dialect has no
 standard written form and there is more than one correct way to write it in Mandarin; the paraphrase
 example above is a typical case. We have not measured how often the meaning is fully kept, which would need

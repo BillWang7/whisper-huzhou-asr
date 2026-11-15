@@ -1,0 +1,8 @@
+# Build-time only (Dockerfile.ct2 stage 1): convert the Hugging Face model to CTranslate2 int8.
+torch==2.5.1
+transformers==4.56.1
+tokenizers==0.22.0
+safetensors==0.6.2
+huggingface_hub==0.35.0
+numpy==2.2.6
+ctranslate2==4.5.0

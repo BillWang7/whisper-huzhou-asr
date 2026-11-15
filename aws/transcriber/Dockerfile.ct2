@@ -1,0 +1,47 @@
+# Transcriber Lambda image with CTranslate2 (int8 Whisper) and Hugging Face's feature extractor/tokenizer, no PyTorch. Build from the repo root:
+#   docker build --platform linux/arm64 -f aws/transcriber/Dockerfile.ct2 -t whisper-lambda-ct2 .   (or linux/amd64)
+#
+# Why: Lambda memory is capped at 3,008 MB for this project and the cap can't be raised by request. The PyTorch
+# int8 model didn't work on Lambda (QNNPACK won't start there; oneDNN needs 4.2 GB and >300 s/clip). CTranslate2 is a
+# separate inference engine built for running Whisper on CPU in 8-bit (the engine behind faster-whisper).
+
+# ---- Stage 1: convert the published model to CTranslate2 int8 (needs PyTorch; none of it reaches the final image)
+# Runs natively on the build machine ($BUILDPLATFORM): the converted model files are identical for arm64 and x86_64
+# Lambdas. Needs BuildKit (`sam build --use-buildkit`, set in samconfig.toml). Running this stage emulated as x86 on a
+# Mac fails: ctranslate2's x86 library "cannot enable executable stack" under the image's newer glibc.
+FROM --platform=$BUILDPLATFORM python:3.12-slim AS convert
+ARG MODEL_ID=BillWang7/whisper-medium-ch-hz
+# Pinned to the published model's commit (15 Nov 2026) so every rebuild gets the same weights; change to update.
+ARG MODEL_REVISION=610b9056415e3b4251792d65225c27050125ae41
+# int8 (smallest, fastest) or int16 (usually closer to float32; x86 only; on Lambda it used 2,999 of 3,008 MB). Must
+# match CT2_COMPUTE_TYPE in template.yaml.
+ARG CT2_QUANTIZATION=int8
+COPY aws/transcriber/requirements-convert.txt /tmp/requirements-convert.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-convert.txt --extra-index-url https://download.pytorch.org/whl/cpu
+RUN python -c "from huggingface_hub import snapshot_download; \
+snapshot_download('${MODEL_ID}', revision='${MODEL_REVISION}', local_dir='/tmp/hf-model', \
+allow_patterns=['*.json', '*.txt', 'model.safetensors'])" \
+    && ct2-transformers-converter --model /tmp/hf-model --output_dir /opt/model-ct2 --quantization ${CT2_QUANTIZATION} \
+    && mkdir /opt/processor && cd /tmp/hf-model \
+    && cp preprocessor_config.json tokenizer.json tokenizer_config.json vocab.json merges.txt special_tokens_map.json \
+          added_tokens.json normalizer.json /opt/processor/ \
+    && rm -rf /tmp/hf-model && ls -la /opt/model-ct2 /opt/processor
+
+# ---- Stage 2: the Lambda image
+FROM public.ecr.aws/lambda/python:3.12
+COPY aws/transcriber/requirements-ct2.txt /tmp/requirements-ct2.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-ct2.txt
+COPY --from=convert /opt/model-ct2 /opt/model-ct2
+COPY --from=convert /opt/processor /opt/processor
+
+ENV ENGINE=ct2 \
+    CT2_MODEL_DIR=/opt/model-ct2 \
+    PROCESSOR_DIR=/opt/processor \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_OFFLINE=1 \
+    HF_HOME=/tmp/hf
+
+COPY src/decoding.py ${LAMBDA_TASK_ROOT}/src/decoding.py
+COPY aws/transcriber/app.py ${LAMBDA_TASK_ROOT}/app.py
+
+CMD ["app.handler"]

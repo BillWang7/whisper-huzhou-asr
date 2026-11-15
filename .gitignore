@@ -9,3 +9,12 @@ CLAUDE.local.md
 
 # Dataset pipeline intermediate files
 pipeline_work/
+
+# AWS SAM build output
+aws/.aws-sam/
+aws/guide/*.aux
+aws/guide/*.log
+runs/
+
+# Website demo bundle (built by aws/scripts/build_demo_data.py)
+aws/api/demo/

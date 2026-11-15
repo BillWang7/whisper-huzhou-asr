@@ -16,13 +16,17 @@ SAMPLE_LABELS = [f"Clip {i + 1} ({'news' if s['file'].startswith('test_') else '
 
 
 def load_test_set(folder: str) -> dict:
-    """A test set folder: audio/N.mp3 <-> row N of text.csv, plus precomputed baseline outputs."""
+    """A test set folder: audio/N.mp3 <-> the text.csv row with clip N, plus precomputed baseline outputs.
+
+    Clip numbers can have gaps (removed bad recordings keep their numbers free), so the demo's slider picks a
+    position in the sorted clip list, not a clip number.
+    """
     path = EXAMPLES_DIR / folder
     with open(path / "text.csv", encoding="utf-8") as f:
-        texts = [row["Text"] for row in csv.DictReader(f)]
+        texts = {int(row.get("clip", i)): row["Text"] for i, row in enumerate(csv.DictReader(f))}
     with open(path / "baseline.csv", encoding="utf-8") as f:
         baseline = {int(row["clip"]): row["baseline_prediction"] for row in csv.DictReader(f)}
-    return {"dir": path, "folder": folder, "texts": texts, "baseline": baseline}
+    return {"dir": path, "folder": folder, "texts": texts, "clips": sorted(texts), "baseline": baseline}
 
 
 # Two held-out test sets, neither used in training
@@ -123,25 +127,31 @@ def run_sample(label: str) -> str:
                       baseline_note=s.get("baseline_note", "Gibberish: it has nothing to do with what was said."))
 
 
-def test_clip_path(set_name: str, n) -> str:
-    return str(TEST_SETS[set_name]["dir"] / "audio" / f"{int(n)}.mp3")
+def clip_at(set_name: str, position) -> int:
+    clips = TEST_SETS[set_name]["clips"]
+    return clips[min(int(position), len(clips) - 1)]
+
+
+def test_clip_path(set_name: str, position) -> str:
+    return str(TEST_SETS[set_name]["dir"] / "audio" / f"{clip_at(set_name, position)}.mp3")
 
 
 def select_set(set_name: str):
-    return gr.update(maximum=len(TEST_SETS[set_name]["texts"]) - 1, value=0)
+    return gr.update(maximum=len(TEST_SETS[set_name]["clips"]) - 1, value=0)
 
 
-def select_test(set_name: str, n):
-    return test_clip_path(set_name, n), placeholder(f"{set_name} clip #{int(n)} loaded. Press Transcribe.")
+def select_test(set_name: str, position):
+    return (test_clip_path(set_name, position),
+            placeholder(f"{set_name} clip #{clip_at(set_name, position)} loaded. Press Transcribe."))
 
 
 def random_test(set_name: str) -> int:
-    return random.randrange(len(TEST_SETS[set_name]["texts"]))
+    return random.randrange(len(TEST_SETS[set_name]["clips"]))
 
 
-def run_test(set_name: str, n) -> str:
-    n, t = int(n), TEST_SETS[set_name]
-    return comparison(t["texts"][n], transcribe(test_clip_path(set_name, n)), t["baseline"].get(n),
+def run_test(set_name: str, position) -> str:
+    t, n = TEST_SETS[set_name], clip_at(set_name, position)
+    return comparison(t["texts"][n], transcribe(test_clip_path(set_name, position)), t["baseline"].get(n),
                       baseline_missing="Not computed for this clip",
                       ref_caption=f"{set_name} clip #{n}. Reference transcript from examples/{t['folder']}/text.csv.")
 
@@ -218,8 +228,8 @@ standard speech recognition handles poorly. Output is written in Mandarin charac
   <div class="stat"><div class="set">News broadcasts · 1,705 held-out clips</div>
     <div class="pair"><span class="num good">26.7%</span><span class="vs">vs</span><span class="num bad">98.8%</span></div>
     <div class="lbl">character error rate: fine-tuned vs baseline Whisper</div></div>
-  <div class="stat"><div class="set">Real speakers · 828 everyday sentences</div>
-    <div class="pair"><span class="num good">55.6%</span><span class="vs">vs</span><span class="num bad">93.5%</span></div>
+  <div class="stat"><div class="set">Real speakers · 819 everyday sentences</div>
+    <div class="pair"><span class="num good">55.3%</span><span class="vs">vs</span><span class="num bad">93.6%</span></div>
     <div class="lbl">character error rate: fine-tuned vs baseline Whisper</div></div>
 </div>
 </div>
@@ -248,7 +258,7 @@ with gr.Blocks(title="Huzhou Dialect ASR", css=CSS, theme=gr.themes.Soft(primary
                         "`examples/real_speakers/`.")
             test_set = gr.Radio(SET_NAMES, value=SET_NAMES[0], label="Test set")
             with gr.Row(equal_height=True):
-                test_num = gr.Slider(0, len(TEST_SETS[SET_NAMES[0]]["texts"]) - 1, value=0, step=1,
+                test_num = gr.Slider(0, len(TEST_SETS[SET_NAMES[0]]["clips"]) - 1, value=0, step=1,
                                      label="Clip number", scale=4)
                 rand_btn = gr.Button("🎲 Random clip", scale=1)
             test_audio = gr.Audio(value=test_clip_path(SET_NAMES[0], 0), type="filepath", interactive=False,

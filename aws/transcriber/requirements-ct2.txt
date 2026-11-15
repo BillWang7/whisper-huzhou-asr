@@ -1,0 +1,10 @@
+# Transcriber Lambda with CTranslate2 (Dockerfile.ct2). No PyTorch at run time: transformers is only used for its
+# feature extractor and tokenizer (numpy), so decoding matches src/decoding.py. Same versions as the main requirements.
+ctranslate2==4.5.0
+transformers==4.56.1
+tokenizers==0.22.0
+huggingface_hub==0.35.0
+safetensors==0.6.2
+numpy==2.2.6
+requests==2.32.5
+imageio-ffmpeg==0.6.0

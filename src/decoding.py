@@ -7,8 +7,9 @@ limit. Following OpenAI's Whisper, if an output compresses suspiciously well (a 
 it is thrown away and decoded again with a little randomness (temperature 0.2, then 0.4, ...). If every
 attempt still loops, the last attempt is kept. 1.35 is Hugging Face's recommended threshold for its
 token-based compression ratio; on our test set it never fires on a human transcript.
+
+PyTorch is imported inside the functions, so the AWS Lambda image (CTranslate2, no PyTorch) can read the settings.
 """
-import torch
 
 GENERATE_KWARGS = dict(
     language="zh",
@@ -20,8 +21,10 @@ GENERATE_KWARGS = dict(
 SEED = 0  # makes the random retries repeatable
 
 
-def pick_device() -> torch.device:
+def pick_device():
     """NVIDIA GPU if available, then Apple GPU, otherwise CPU (always CPU inside Docker on a Mac)."""
+    import torch
+
     if torch.cuda.is_available():
         return torch.device("cuda")
     if torch.backends.mps.is_available():
@@ -30,5 +33,7 @@ def pick_device() -> torch.device:
 
 
 def generate(model, input_features, attention_mask):
+    import torch
+
     torch.manual_seed(SEED)
     return model.generate(input_features, attention_mask=attention_mask, **GENERATE_KWARGS)

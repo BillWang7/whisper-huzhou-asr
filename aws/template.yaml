@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Huzhou dialect ASR, serverless. Website + REST API (API Gateway -> API Lambda), audio uploads to S3,
+  S3 upload triggers a containerized Whisper Lambda, results stored in DynamoDB.
+
+Resources:
+  # ---------- Storage ----------
+  AudioBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      # A fixed name avoids a circular reference between the bucket, its trigger and the function's permissions
+      BucketName: !Sub "${AWS::StackName}-audio-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:  # nothing in this bucket is public; uploads use one-time signed forms
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteUploadsAfter7Days
+            Status: Enabled
+            Prefix: uploads/
+            ExpirationInDays: 7
+      CorsConfiguration:  # lets the web page upload straight to S3
+        CorsRules:
+          - AllowedMethods: [POST]
+            AllowedOrigins: ["*"]
+            AllowedHeaders: ["*"]
+            MaxAge: 3000
+
+  JobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST  # pay per read/write, nothing when idle
+      AttributeDefinitions:
+        - { AttributeName: job_id, AttributeType: S }
+        - { AttributeName: kind, AttributeType: S }
+        - { AttributeName: created_at, AttributeType: S }
+      KeySchema:
+        - { AttributeName: job_id, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: ByTime  # "newest jobs first" for the history list
+          KeySchema:
+            - { AttributeName: kind, KeyType: HASH }
+            - { AttributeName: created_at, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+
+  # ---------- Compute ----------
+  TranscriberFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      # x86_64, not arm64: measured on Lambda, warm ~13.5 s vs ~19 s per clip and cold start ~55 s vs ~89 s. x86 costs
+      # 25% more per second, so about the same per clip. (CTranslate2's int8 kernels are best tuned for x86.)
+      Architectures: [x86_64]
+      # New AWS projects cap Lambda memory at 3008 MB (about 2 vCPUs), and the cap can't be raised by request.
+      # CTranslate2 int8 fits: measured on Lambda ~2.4 GB max memory used (incl. file cache), ~13.5 s per clip warm.
+      MemorySize: 3008
+      Timeout: 300
+      EphemeralStorage: { Size: 1024 }
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref JobsTable
+          CT2_THREADS: "2"  # one thread per vCPU; more threads than cores made it ~9x slower in testing
+          CT2_COMPUTE_TYPE: int8  # must match CT2_QUANTIZATION below. int16 was tried: 2,999 of 3,008 MB used, slower
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub "${AWS::StackName}-audio-${AWS::AccountId}"
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobsTable
+      Events:
+        AudioUploaded:
+          Type: S3
+          Properties:
+            Bucket: !Ref AudioBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - { Name: prefix, Value: uploads/ }
+    Metadata:
+      DockerContext: ..
+      Dockerfile: aws/transcriber/Dockerfile.ct2  # CTranslate2; Dockerfile (PyTorch int8) fails on Lambda
+      DockerBuildArgs:
+        CT2_QUANTIZATION: int8
+      DockerTag: v2
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: api/  # includes api/demo/ (test clips + transcripts): run aws/scripts/build_demo_data.py first
+      Handler: app.handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref JobsTable
+          BUCKET_NAME: !Ref AudioBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobsTable
+        - S3WritePolicy:  # needed so the one-time upload forms it signs are valid
+            BucketName: !Ref AudioBucket
+      Events:
+        Page:      { Type: HttpApi, Properties: { ApiId: !Ref Api, Path: /, Method: GET } }
+        CreateJob: { Type: HttpApi, Properties: { ApiId: !Ref Api, Path: /jobs, Method: POST } }
+        ListJobs:  { Type: HttpApi, Properties: { ApiId: !Ref Api, Path: /jobs, Method: GET } }
+        GetJob:    { Type: HttpApi, Properties: { ApiId: !Ref Api, Path: "/jobs/{id}", Method: GET } }
+        Demo:      { Type: HttpApi, Properties: { ApiId: !Ref Api, Path: /demo, Method: GET } }
+        Audio:     { Type: HttpApi, Properties: { ApiId: !Ref Api, Path: "/audio/{set}/{file}", Method: GET } }
+
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      DefaultRouteSettings:  # rate limit so a bot can't run up the bill
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
+
+Outputs:
+  WebsiteUrl:
+    Description: Open this in a browser
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/"
+  AudioBucketName:
+    Value: !Ref AudioBucket
+  JobsTableName:
+    Value: !Ref JobsTable

@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Huzhou Dialect ASR</title>
+<style>
+  /* Same layout and colours as the Gradio demo (app/demo.py: gr.themes.Soft, green) */
+  :root {
+    --bg: #f9fafb; --block: #ffffff; --block-2: #f3f4f6; --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb;
+    --primary: #22c55e; --primary-2: #16a34a; --primary-ink: #ffffff; --primary-soft: #dcfce7;
+    --good: #16a34a; --bad: #dc2626; --bad-soft: rgba(220, 38, 38, 0.16);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f19; --block: #111827; --block-2: #1f2937; --ink: #f3f4f6; --muted: #9ca3af; --line: #374151;
+      --primary: #22c55e; --primary-2: #16a34a; --primary-ink: #052e16; --primary-soft: #14532d;
+      --good: #4ade80; --bad: #f87171; --bad-soft: rgba(248, 113, 113, 0.18);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f19; --block: #111827; --block-2: #1f2937; --ink: #f3f4f6; --muted: #9ca3af; --line: #374151;
+    --primary: #22c55e; --primary-2: #16a34a; --primary-ink: #052e16; --primary-soft: #14532d;
+    --good: #4ade80; --bad: #f87171; --bad-soft: rgba(248, 113, 113, 0.18);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 "Source Sans Pro", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; }
+  a { color: var(--primary-2); }
+  h1 { font-size: 2rem; margin: 0 0 0.2em; }
+  code { background: var(--block-2); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+
+  /* header stats */
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .stat { flex: 1 1 180px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--block); }
+  .stat .set { font-weight: 600; font-size: 0.9em; opacity: 0.85; }
+  .stat .pair { display: flex; align-items: baseline; gap: 8px; margin: 2px 0; }
+  .stat .num { font-size: 1.6em; font-weight: 700; }
+  .num.good { color: var(--good); } .num.bad { color: var(--bad); }
+  .stat .vs { opacity: 0.6; } .stat .lbl { font-size: 0.85em; opacity: 0.75; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .tab { font: inherit; background: none; border: 1px solid transparent; border-bottom: none; color: var(--muted);
+         padding: 8px 14px; border-radius: 10px 10px 0 0; cursor: pointer; margin-bottom: -1px; }
+  .tab[aria-selected="true"] { color: var(--ink); background: var(--block); border-color: var(--line); font-weight: 600; }
+  .panel { background: var(--block); border: 1px solid var(--line); border-top: none; border-radius: 0 0 12px 12px;
+           padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .panel[hidden] { display: none; }
+  .intro { margin: 0; }
+
+  /* blocks, like Gradio components */
+  .block { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--block); }
+  .block-label { font-size: 0.85em; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill { font: inherit; font-size: 0.95em; border: 1px solid var(--line); background: var(--block-2); color: var(--ink);
+          border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .pill[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary); }
+  audio { width: 100%; display: block; }
+  .row { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
+  .row .grow { flex: 4 1 260px; }
+  input[type=range] { width: 100%; accent-color: var(--primary-2); }
+  .slider-top { display: flex; justify-content: space-between; align-items: center; }
+  .slider-top output { font-variant-numeric: tabular-nums; font-weight: 600; }
+  button.btn { font: inherit; font-weight: 600; border-radius: 10px; padding: 10px 16px; cursor: pointer;
+               border: 1px solid var(--line); background: var(--block-2); color: var(--ink); }
+  button.btn.primary { background: linear-gradient(to bottom right, var(--primary), var(--primary-2)); color: var(--primary-ink);
+                       border-color: var(--primary-2); width: 100%; font-size: 1.05em; }
+  button.btn:disabled { opacity: 0.55; cursor: progress; }
+  .row .btn { flex: 1 1 140px; }
+  input[type=file] { display: none; }
+  .own-picks { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .own-picks .meta { color: var(--muted); font-size: 0.9em; }
+
+  /* results (same classes as app/demo.py) */
+  .placeholder { padding: 18px; text-align: center; opacity: 0.6; border: 1px dashed var(--line); border-radius: 12px; }
+  .waiting { padding: 16px 18px; border: 1px dashed var(--primary); border-radius: 12px; background: var(--primary-soft); }
+  .waiting .t { font-weight: 600; } .waiting .why { font-size: 0.9em; opacity: 0.8; margin-top: 4px; }
+  .error { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--bad); color: var(--bad); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .tile { padding: 16px 20px; border-radius: 14px; border: 1px solid var(--line); background: var(--block); border-top-width: 6px; }
+  .tile.ours { border-top-color: var(--good); } .tile.base { border-top-color: var(--bad); }
+  .tile.na { border-top-color: #9ca3af; border-style: dashed; }
+  .tile-title { font-weight: 600; font-size: 0.95em; opacity: 0.85; }
+  .tile-num { font-size: 3.6em; font-weight: 800; line-height: 1.05; margin-top: 6px; }
+  .tile.ours .tile-num { color: var(--good); } .tile.base .tile-num { color: var(--bad); } .tile.na .tile-num { opacity: 0.4; }
+  .tile-lbl { font-size: 0.9em; font-weight: 600; opacity: 0.75; }
+  .tile-sub { margin-top: 6px; font-size: 0.9em; opacity: 0.75; }
+  .section { padding: 14px 16px; margin-bottom: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--block); }
+  .section-title { font-weight: 600; font-size: 0.9em; opacity: 0.85; margin-bottom: 10px; }
+  .diff { display: flex; flex-wrap: wrap; row-gap: 10px; }
+  .col { display: inline-flex; flex-direction: column; align-items: center; }
+  .col.lab { align-items: flex-start; margin-right: 10px; }
+  .col.more { justify-content: flex-end; font-size: 0.85em; opacity: 0.7; padding: 0 0 4px 8px; }
+  .col.lab .c { font-size: 0.8em; font-weight: 600; opacity: 0.6; min-width: 0; line-height: 2.2; }
+  .c { font-size: 1.4em; line-height: 1.55; min-width: 1.3em; text-align: center; padding: 0 2px; border-radius: 5px; margin: 1px; }
+  .c.ok { color: var(--good); }
+  .c.bad { background: var(--bad-soft); color: var(--bad); font-weight: 700; }
+  .c.miss { text-decoration: underline 2px var(--bad); text-underline-offset: 4px; }
+  .c.gap { opacity: 0.3; }
+  .legend { font-size: 0.85em; opacity: 0.8; margin: 4px 0 8px; }
+  .legend .c { font-size: 1.05em; margin: 0 2px 0 10px; } .legend .c:first-child { margin-left: 0; }
+  .own-text { font-size: 1.4em; line-height: 1.6; word-break: break-all; }
+  .note { margin-top: 8px; font-size: 0.85em; opacity: 0.7; }
+  .meaning { margin-bottom: 12px; padding: 10px 16px; border-radius: 12px; font-size: 1.05em; background: var(--block); border: 1px solid var(--line); }
+  .meaning span { display: block; font-size: 0.75em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.6; margin-bottom: 2px; }
+  .timing { font-size: 0.85em; color: var(--muted); margin: -4px 0 10px; }
+
+  /* footer */
+  footer { margin-top: 18px; font-size: 0.85em; color: var(--muted); }
+  details.why { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--block); padding: 10px 14px; }
+  details.why summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+  details.why p { margin: 8px 0 0; }
+  details.why ul { margin: 8px 0 0; padding-left: 1.2em; } details.why li + li { margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <div id="header">
+    <h1>Huzhou Dialect Speech Recognition</h1>
+    <p>Whisper-medium fine-tuned on ~15,000 clips of Huzhou dialect (湖州话), a Wu Chinese dialect that
+      standard speech recognition handles poorly. Output is written in Mandarin characters.
+      <a href="https://huggingface.co/BillWang7/whisper-medium-ch-hz" target="_blank" rel="noopener">Model on Hugging Face</a> ·
+      <a href="https://github.com/BillWang7/whisper-huzhou-asr" target="_blank" rel="noopener">Code on GitHub</a></p>
+    <div class="stats">
+      <div class="stat"><div class="set">News broadcasts · 1,705 held-out clips</div>
+        <div class="pair"><span class="num good">26.7%</span><span class="vs">vs</span><span class="num bad">98.8%</span></div>
+        <div class="lbl">character error rate: fine-tuned vs baseline Whisper</div></div>
+      <div class="stat"><div class="set">Real speakers · 819 everyday sentences</div>
+        <div class="pair"><span class="num good">55.3%</span><span class="vs">vs</span><span class="num bad">93.6%</span></div>
+        <div class="lbl">character error rate: fine-tuned vs baseline Whisper</div></div>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="featured">🎧 Featured clips</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="random">🎲 Random test clip</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="own">🎙️ Your own audio</button>
+  </div>
+
+  <section class="panel" id="featured" role="tabpanel">
+    <p class="intro">Hand-picked Huzhou dialect clips the model never trained on, with English translations:
+      news broadcasts, and real speakers reading everyday sentences.</p>
+    <div class="block"><div class="block-label">Sample clips</div><div class="pills" id="samplePills"></div></div>
+    <div class="block"><div class="block-label">Audio</div><audio id="sampleAudio" controls preload="none"></audio></div>
+    <button class="btn primary" id="sampleBtn">Transcribe</button>
+    <div id="sampleOut"><div class="placeholder">Press Transcribe to compare the models.</div></div>
+  </section>
+
+  <section class="panel" id="random" role="tabpanel" hidden>
+    <p class="intro">Don't trust hand-picked examples? Roll a random clip (good and bad) from either held-out test set,
+      or choose one by number. <b>News broadcasts</b> are from the same TV channel as the training data;
+      <b>real speakers</b> are people reading everyday sentences, mostly recorded on phones, which is harder.
+      Clips and transcripts are in <code>examples/test_set/</code> and <code>examples/real_speakers/</code>.</p>
+    <div class="block"><div class="block-label">Test set</div><div class="pills" id="setPills">
+      <button class="pill" aria-pressed="true" data-set="news">News broadcasts</button>
+      <button class="pill" aria-pressed="false" data-set="real">Real speakers</button></div></div>
+    <div class="row">
+      <div class="block grow">
+        <div class="slider-top"><span class="block-label">Clip number</span><output id="clipLabel"></output></div>
+        <input type="range" id="clipSlider" min="0" max="0" value="0" step="1" aria-label="Clip number">
+      </div>
+      <button class="btn" id="randBtn">🎲 Random clip</button>
+    </div>
+    <div class="block"><div class="block-label">Test clip</div><audio id="testAudio" controls preload="none"></audio></div>
+    <button class="btn primary" id="testBtn">Transcribe</button>
+    <div id="testOut"><div class="placeholder">Pick a clip, then press Transcribe.</div></div>
+  </section>
+
+  <section class="panel" id="own" role="tabpanel" hidden>
+    <p class="intro">Upload a recording of Huzhou dialect (MP3, WAV, M4A…), or record yourself with the microphone.
+      Clips under 30 seconds work best.</p>
+    <div class="block"><div class="block-label">Your audio</div>
+      <div class="own-picks">
+        <label class="btn" for="file" style="cursor:pointer">📁 Upload a file</label>
+        <input id="file" type="file" accept="audio/*">
+        <button class="btn" id="recBtn">🎙️ Record</button>
+        <span class="meta" id="picked">Nothing chosen yet.</span>
+      </div>
+      <audio id="ownAudio" controls hidden style="margin-top:10px"></audio>
+    </div>
+    <button class="btn primary" id="ownBtn">Transcribe</button>
+    <div id="ownOut"><div class="placeholder">Upload or record something, then press Transcribe.</div></div>
+  </section>
+
+  <details class="why">
+    <summary>Why ~15 seconds? A deliberate cost trade-off</summary>
+    <p>This demo runs on a <b>serverless AWS architecture</b> built to cost close to nothing when no one is using it:
+      the browser uploads audio straight to <b>S3</b>, which triggers a containerized <b>Lambda</b> function that runs
+      the model and writes the result to <b>DynamoDB</b>, while <b>API Gateway</b> serves the page and job status.
+      Everything is defined as code (AWS SAM).</p>
+    <ul>
+      <li><b>Fitting the model:</b> Lambda has no GPU and caps memory at 3 GB, so the 769M-parameter model was
+        converted to 8-bit (CTranslate2, 3 GB → 742 MB). On held-out test clips its error rate stays within about
+        1 point of the full model (news: 24.6% vs 23.8%).</li>
+      <li><b>Tuning:</b> profiling traced an early accuracy loss to the audio preprocessing rather than the 8-bit weights,
+        and benchmarking chose x86 over ARM processors (about 30% faster per clip).</li>
+      <li><b>The result:</b> about 13 seconds per clip on 2 CPU cores (up to a minute if the site has been idle, while
+        Lambda starts up), at about $0.0007 per transcription. An always-on GPU server would answer in about a second
+        but cost about $590 a month.</li>
+    </ul>
+  </details>
+
+  <footer>
+    * <b>Baseline outputs are precomputed, not run live.</b> They were generated once in advance by running the
+    unmodified <code>openai/whisper-medium</code> on every test clip, with the same settings (language: Chinese, task:
+    transcribe, same loop guard). The fine-tuned model's output is computed live every time you press Transcribe.
+    Error rates are character error rate (CER): edit distance divided by reference length, ignoring punctuation,
+    which can exceed 100% when the output is longer than the reference. The scores in the header are for the
+    full-precision model. All featured and random clips are held out: none were used in training. Real-speaker sentences
+    come from everyday dialogue and narration, so word choices the model renders differently count as errors even
+    when the meaning is kept.
+  </footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const placeholder = msg => `<div class="placeholder">${esc(msg)}</div>`;
+let demo = null, sample = 0, testSet = "news";
+
+// ---------- tabs ----------
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+  document.querySelectorAll(".panel").forEach(p => p.hidden = p.id !== t.dataset.tab);
+});
+
+// ---------- rendering (mirrors app/demo.py) ----------
+function tile(title, s, kind) {
+  return `<div class="tile ${kind}"><div class="tile-title">${esc(title)}</div><div class="tile-num">${Math.round(s.cer)}%</div>` +
+         `<div class="tile-lbl">character error rate</div><div class="tile-sub">${s.correct} of ${s.length} characters correct</div></div>`;
+}
+function diffGrid(title, s, modelLabel) {
+  const cols = [`<div class="col lab"><span class="c">What was said</span><span class="c">${esc(modelLabel)}</span></div>`];
+  for (const [r, h] of s.pairs) {
+    let top, bot;
+    if (r === h) { top = `<span class="c">${esc(r)}</span>`; bot = `<span class="c ok">${esc(h)}</span>`; }
+    else if (r === null) { top = '<span class="c gap">·</span>'; bot = `<span class="c bad">${esc(h)}</span>`; }
+    else if (h === null) { top = `<span class="c miss">${esc(r)}</span>`; bot = '<span class="c bad">✕</span>'; }
+    else { top = `<span class="c miss">${esc(r)}</span>`; bot = `<span class="c bad">${esc(h)}</span>`; }
+    cols.push(`<div class="col">${top}${bot}</div>`);
+  }
+  if (s.hidden) cols.push(`<div class="col more">… ${s.hidden} more extra characters not shown</div>`);
+  const note = s.note ? `<div class="note">${esc(s.note)}</div>` : "";
+  return `<div class="section"><div class="section-title">${esc(title)}</div><div class="diff">${cols.join("")}</div>${note}</div>`;
+}
+const LEGEND = '<div class="legend"><span class="c ok">字</span> correct <span class="c bad">字</span> wrong or extra ' +
+               '<span class="c bad">✕</span> missed</div>';
+function timing(j) {
+  return `<div class="timing">Model ran in ${j.inference_seconds} s on AWS Lambda` +
+         (j.cold_start === true ? " · cold start: the model was loaded first" : " · warm") + "</div>";
+}
+function comparison(c, j) {
+  const parts = [];
+  if (c.english) parts.push(`<div class="meaning"><span>English meaning</span>${esc(c.english)}</div>`);
+  parts.push(timing(j));
+  const tiles = [tile("Fine-tuned model (this project)", c.ours, "ours")];
+  tiles.push(c.baseline ? tile("Baseline Whisper-medium*", c.baseline, "base")
+    : '<div class="tile na"><div class="tile-title">Baseline Whisper-medium*</div><div class="tile-num">–</div><div class="tile-sub">Not computed for this clip</div></div>');
+  parts.push(`<div class="tiles">${tiles.join("")}</div>`);
+  parts.push(diffGrid("Fine-tuned model vs. what was said", c.ours, "Our model"));
+  if (c.baseline) parts.push(diffGrid("Baseline Whisper vs. what was said", c.baseline, "Baseline"));
+  parts.push(LEGEND);
+  if (c.caption) parts.push(`<div class="note">${esc(c.caption)}</div>`);
+  return parts.join("");
+}
+function ownResult(j) {
+  return timing(j) + `<div class="section"><div class="section-title">Fine-tuned model output</div>` +
+    `<div class="own-text">${j.text ? esc(j.text) : "<em>(no speech detected)</em>"}</div>` +
+    `<div class="note">There's no reference transcript for your own audio, so no error rate is shown.` +
+    (j.truncated === true ? " Only the first 30 seconds were transcribed." : "") + `</div></div>`;
+}
+
+// ---------- jobs ----------
+async function waitFor(jobId, out) {
+  const t0 = Date.now();
+  while (true) {
+    const s = Math.round((Date.now() - t0) / 1000);
+    out.innerHTML = `<div class="waiting"><div class="t">Transcribing on AWS Lambda… ${s} s</div><div class="why">` +
+      (s < 20 ? "Usually about 15 seconds: the model runs on 2 CPU cores, not a GPU."
+              : "The site was idle, so AWS is starting a fresh copy and loading the model first (a cold start, up to about a minute).") +
+      "</div></div>";
+    await new Promise(r => setTimeout(r, 2000));
+    const j = await (await fetch("jobs/" + jobId)).json();
+    if (j.status === "DONE") return j;
+    if (j.status === "ERROR") throw new Error(j.error || "Transcription failed.");
+    if (s > 240) throw new Error("Timed out waiting for the result. Please try again.");
+  }
+}
+async function run(btn, out, start, render) {
+  btn.disabled = true;
+  try {
+    const jobId = await start();
+    out.innerHTML = render(await waitFor(jobId, out));
+  } catch (e) { out.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+  btn.disabled = false;
+}
+async function startExample(set, clip) {
+  const r = await fetch("jobs", { method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ example: { set, clip } }) });
+  if (!r.ok) throw new Error("API error " + r.status + (r.status === 429 ? ": too many requests, try again in a moment" : ""));
+  return (await r.json()).job_id;
+}
+
+// ---------- featured clips ----------
+function selectSample(i) {
+  sample = i;
+  document.querySelectorAll("#samplePills .pill").forEach((p, k) => p.setAttribute("aria-pressed", k === i));
+  const s = demo.samples[i];
+  $("sampleAudio").src = `audio/${s.set}/${s.clip}.mp3`;
+  $("sampleOut").innerHTML = placeholder("Press Transcribe to compare the models.");
+}
+$("sampleBtn").onclick = () => { const s = demo.samples[sample];
+  run($("sampleBtn"), $("sampleOut"), () => startExample(s.set, s.clip), j => comparison(j.comparison, j)); };
+
+// ---------- random test clip ----------
+const SET_LABEL = { news: "News broadcasts", real: "Real speakers" };
+const clipAt = pos => demo.clips[testSet][Math.min(pos, demo.clips[testSet].length - 1)];
+function selectTest() {
+  const clip = clipAt(+$("clipSlider").value);
+  $("clipLabel").textContent = `#${clip}`;
+  $("testAudio").src = `audio/${testSet}/${clip}.mp3`;
+  $("testOut").innerHTML = placeholder(`${SET_LABEL[testSet]} clip #${clip} loaded. Press Transcribe.`);
+}
+document.querySelectorAll("#setPills .pill").forEach(p => p.onclick = () => {
+  testSet = p.dataset.set;
+  document.querySelectorAll("#setPills .pill").forEach(x => x.setAttribute("aria-pressed", x === p));
+  $("clipSlider").max = demo.clips[testSet].length - 1; $("clipSlider").value = 0; selectTest();
+});
+$("clipSlider").oninput = selectTest;
+$("randBtn").onclick = () => { $("clipSlider").value = Math.floor(Math.random() * demo.clips[testSet].length); selectTest(); };
+$("testBtn").onclick = () => { const clip = clipAt(+$("clipSlider").value);
+  run($("testBtn"), $("testOut"), () => startExample(testSet, clip), j => comparison(j.comparison, j)); };
+
+// ---------- your own audio ----------
+let blob = null, blobName = null, recorder = null;
+function pick(b, n) {
+  blob = b; blobName = n; $("picked").textContent = n;
+  $("ownAudio").src = URL.createObjectURL(b); $("ownAudio").hidden = false;
+  $("ownOut").innerHTML = placeholder("Press Transcribe.");
+}
+$("file").onchange = e => { const f = e.target.files[0]; if (f) pick(f, f.name); };
+$("recBtn").onclick = async () => {
+  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const type = recorder.mimeType || "audio/webm";
+      pick(new Blob(chunks, { type }), "recording." + (type.includes("mp4") ? "m4a" : "webm"));
+      $("recBtn").textContent = "🎙️ Record";
+    };
+    recorder.start();
+    $("recBtn").textContent = "■ Stop recording";
+  } catch (e) { $("ownOut").innerHTML = `<div class="error">Microphone not available: ${esc(e.message)}</div>`; }
+};
+$("ownBtn").onclick = () => {
+  if (!blob) { $("ownOut").innerHTML = placeholder("Add some audio first."); return; }
+  run($("ownBtn"), $("ownOut"), async () => {
+    $("ownOut").innerHTML = '<div class="waiting"><div class="t">Uploading…</div></div>';
+    const r = await fetch("jobs", { method: "POST", headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ filename: blobName }) });
+    if (!r.ok) throw new Error("API error " + r.status);
+    const { job_id, upload } = await r.json();
+    const form = new FormData();
+    Object.entries(upload.fields).forEach(([k, v]) => form.append(k, v));
+    form.append("file", blob);
+    const u = await fetch(upload.url, { method: "POST", body: form });
+    if (!u.ok) throw new Error("Upload failed (" + u.status + "). Files must be under 10 MB.");
+    return job_id;
+  }, ownResult);
+};
+
+// ---------- start ----------
+(async () => {
+  try {
+    demo = await (await fetch("demo")).json();
+    $("samplePills").innerHTML = demo.samples.map((s, i) =>
+      `<button class="pill" aria-pressed="false" data-i="${i}">${esc(s.label)}</button>`).join("");
+    document.querySelectorAll("#samplePills .pill").forEach(p => p.onclick = () => selectSample(+p.dataset.i));
+    selectSample(0);
+    $("clipSlider").max = demo.clips.news.length - 1;
+    selectTest();
+  } catch (e) {
+    $("sampleOut").innerHTML = `<div class="error">Couldn't load the demo clips: ${esc(e.message)}</div>`;
+  }
+})();
+</script>
+</body>
+</html>

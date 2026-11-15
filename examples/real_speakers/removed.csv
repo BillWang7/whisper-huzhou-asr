@@ -1,0 +1,10 @@
+clip,reason,detail,Text
+197,speaker said different words,models agree with each other (0% apart),你听见没有
+226,speaker said different words,models agree with each other (38% apart),你们两个赶紧去吃吧
+240,speaker said different words,models agree with each other (40% apart),你听我说
+282,bad recording,TOO_LITTLE_SPEECH TOO_QUIET,老婆，今天情况怎么样啊
+323,bad recording,NOISY,前边有一包子铺特别香
+334,bad recording,NO_SPEECH TOO_QUIET CUT_END,可是她是个爱子女的妈妈
+806,bad recording,TOO_QUIET NOISY CUT_END,肯定特别赚钱
+811,bad recording,NO_SPEECH NOISY,我们去试试吧
+814,bad recording,NO_SPEECH NOISY,最后一次改了
