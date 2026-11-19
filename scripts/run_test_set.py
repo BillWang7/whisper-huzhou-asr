@@ -19,10 +19,11 @@ import torchaudio
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 from src.decoding import generate, pick_device
+from src.model_version import MODEL_ID, MODEL_REVISION
 
 MODELS = {
     "baseline": ("openai/whisper-medium", "baseline_prediction"),
-    "finetuned": ("BillWang7/whisper-medium-ch-hz", "finetuned_prediction"),
+    "finetuned": (MODEL_ID, "finetuned_prediction"),  # pinned to MODEL_REVISION (v1)
 }
 SETS = {"news": Path("examples/test_set"), "real": Path("examples/real_speakers")}
 
@@ -43,8 +44,9 @@ test_dir = SETS[args.set]
 out_csv = Path(args.out or test_dir / f"{args.model}.csv")
 
 device = pick_device()
-processor = WhisperProcessor.from_pretrained(model_id)
-model = WhisperForConditionalGeneration.from_pretrained(model_id).to(device).eval()
+revision = MODEL_REVISION if model_id == MODEL_ID else None  # the fine-tuned model is pinned (v1)
+processor = WhisperProcessor.from_pretrained(model_id, revision=revision)
+model = WhisperForConditionalGeneration.from_pretrained(model_id, revision=revision).to(device).eval()
 
 clips = sorted(int(f.stem) for f in (test_dir / "audio").glob("*.mp3"))
 if args.limit:

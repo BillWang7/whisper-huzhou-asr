@@ -9,18 +9,17 @@ from transformers import (
 )
 
 from src.decoding import generate, pick_device
-
-MODEL_ID = "BillWang7/whisper-medium-ch-hz"
+from src.model_version import MODEL_ID, MODEL_REVISION
 SAMPLE_RATE = 16000
 
 DEVICE = pick_device()
 
 processor = WhisperProcessor.from_pretrained(
-    MODEL_ID
+    MODEL_ID, revision=MODEL_REVISION
 )
 
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    MODEL_ID
+    MODEL_ID, revision=MODEL_REVISION
 ).to(DEVICE)
 
 model.eval()
